@@ -9,7 +9,7 @@ DB_PATH = os.environ.get("DB_PATH", "data/real_estate.db")
 
 def main():
     app = create_app(DB_PATH)
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=5001)
 
 
 if __name__ == "__main__":

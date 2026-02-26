@@ -9,12 +9,12 @@ export function ZoneFilters({ filters, onChange }) {
   const [provinces, setProvinces] = useState([]);
 
   useEffect(() => {
-    getRegions().then(setRegions).catch(() => {});
+    getRegions().then(setRegions).catch(() => { });
   }, []);
 
   useEffect(() => {
     if (filters.region) {
-      getProvinces(filters.region).then(setProvinces).catch(() => {});
+      getProvinces(filters.region).then(setProvinces).catch(() => { });
     } else {
       setProvinces([]);
     }
@@ -29,8 +29,11 @@ export function ZoneFilters({ filters, onChange }) {
       <select
         value={filters.region || ''}
         onChange={(e) => {
-          update('region', e.target.value);
-          update('province', undefined);
+          onChange({
+            ...filters,
+            region: e.target.value || undefined,
+            province: undefined,
+          });
         }}
       >
         <option value="">All Regions</option>

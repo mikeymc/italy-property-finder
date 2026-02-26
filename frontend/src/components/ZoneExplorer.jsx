@@ -14,8 +14,8 @@ function grossYield(zone) {
 export function ZoneExplorer({ onSelectZone }) {
   const [filters, setFilters] = useState({});
   const [zones, setZones] = useState([]);
-  const [sortKey, setSortKey] = useState('buy_min');
-  const [sortAsc, setSortAsc] = useState(true);
+  const [sortKey, setSortKey] = useState('yield');
+  const [sortAsc, setSortAsc] = useState(false);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
