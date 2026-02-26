@@ -16,13 +16,41 @@ def parse_italian_float(value: Optional[str]) -> Optional[float]:
     return float(value.replace(",", "."))
 
 
+def _detect_csv_format(filepath: str) -> tuple[str, bool]:
+    """Detect delimiter and whether the file has a title row before headers.
+
+    Returns (delimiter, has_title_row).
+    """
+    with open(filepath, encoding="utf-8") as f:
+        first_line = f.readline()
+        second_line = f.readline()
+    # If the first line doesn't contain the expected header column, it's a title row
+    has_title = "Area_territoriale" not in first_line
+    # Check which delimiter the header line uses
+    header_line = second_line if has_title else first_line
+    delimiter = ";" if ";" in header_line else ","
+    return delimiter, has_title
+
+
+def _open_omi_csv(filepath: str) -> csv.DictReader:
+    """Open an OMI CSV file, handling both comma and semicolon formats."""
+    delimiter, has_title = _detect_csv_format(filepath)
+    f = open(filepath, encoding="utf-8")
+    if has_title:
+        f.readline()  # Skip title row
+    return csv.DictReader(f, delimiter=delimiter)
+
+
 def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     """Load OMI valori and zone CSVs into a SQLite database."""
     conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA journal_mode=WAL")
 
+    conn.execute("DROP TABLE IF EXISTS omi_values")
+    conn.execute("DROP TABLE IF EXISTS omi_zones")
+
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS omi_values (
+        CREATE TABLE omi_values (
             area TEXT,
             region TEXT,
             province TEXT,
@@ -42,7 +70,7 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     """)
 
     conn.execute("""
-        CREATE TABLE IF NOT EXISTS omi_zones (
+        CREATE TABLE omi_zones (
             area TEXT,
             region TEXT,
             province TEXT,
@@ -58,29 +86,30 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     """)
 
     # Load values (residential only)
-    with open(valori_csv, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        rows = []
-        for row in reader:
-            if row["Cod_Tip"] not in RESIDENTIAL_TYPES:
-                continue
-            rows.append((
-                row["Area_territoriale"],
-                row["Regione"],
-                row["Prov"],
-                row["Comune_ISTAT"],
-                row["Comune_descrizione"],
-                row["Fascia"],
-                row["Zona"],
-                row["LinkZona"],
-                row["Cod_Tip"],
-                row["Descr_Tipologia"],
-                row["Stato"],
-                parse_italian_float(row["Compr_min"]),
-                parse_italian_float(row["Compr_max"]),
-                parse_italian_float(row["Loc_min"]),
-                parse_italian_float(row["Loc_max"]),
-            ))
+    reader = _open_omi_csv(valori_csv)
+    rows = []
+    for row in reader:
+        # Strip trailing empty keys from semicolon-delimited files
+        cod_tip = row.get("Cod_Tip", "").strip()
+        if cod_tip not in RESIDENTIAL_TYPES:
+            continue
+        rows.append((
+            row["Area_territoriale"].strip(),
+            row["Regione"].strip(),
+            row["Prov"].strip(),
+            row["Comune_ISTAT"].strip(),
+            row["Comune_descrizione"].strip(),
+            row["Fascia"].strip(),
+            row["Zona"].strip(),
+            row["LinkZona"].strip(),
+            cod_tip,
+            row["Descr_Tipologia"].strip(),
+            row["Stato"].strip(),
+            parse_italian_float(row["Compr_min"].strip()),
+            parse_italian_float(row["Compr_max"].strip()),
+            parse_italian_float(row["Loc_min"].strip()),
+            parse_italian_float(row["Loc_max"].strip()),
+        ))
 
     conn.executemany(
         "INSERT INTO omi_values VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -88,23 +117,22 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     )
 
     # Load zones
-    with open(zone_csv, encoding="utf-8") as f:
-        reader = csv.DictReader(f)
-        zone_rows = []
-        for row in reader:
-            zone_rows.append((
-                row["Area_territoriale"],
-                row["Regione"],
-                row["Prov"],
-                row["Comune_ISTAT"],
-                row["Comune_descrizione"],
-                row["Fascia"],
-                row["Zona"],
-                row.get("Zona_Descr", ""),
-                row["LinkZona"],
-                row.get("Descr_tip_prev", ""),
-                int(row.get("Microzona", 0) or 0),
-            ))
+    reader = _open_omi_csv(zone_csv)
+    zone_rows = []
+    for row in reader:
+        zone_rows.append((
+            row["Area_territoriale"].strip(),
+            row["Regione"].strip(),
+            row["Prov"].strip(),
+            row["Comune_ISTAT"].strip(),
+            row["Comune_descrizione"].strip(),
+            row["Fascia"].strip(),
+            row["Zona"].strip(),
+            row.get("Zona_Descr", "").strip(),
+            row["LinkZona"].strip(),
+            row.get("Descr_tip_prev", "").strip(),
+            int(row.get("Microzona", "0").strip() or 0),
+        ))
 
     conn.executemany(
         "INSERT INTO omi_zones VALUES (?,?,?,?,?,?,?,?,?,?,?)",
