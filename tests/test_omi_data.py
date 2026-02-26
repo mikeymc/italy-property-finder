@@ -7,7 +7,7 @@ import tempfile
 
 import pytest
 
-from src.omi_data import parse_italian_float, load_omi_to_sqlite, query_zones
+from src.omi_data import parse_italian_float, load_omi_to_sqlite, query_zones, get_regions, get_provinces
 
 
 class TestItalianNumberParsing:
@@ -77,6 +77,63 @@ class TestLoadOMI:
         # Monthly rent per sqm should be reasonable: €1-50 range
         assert 0.5 < row[0] < 100
         assert 0.5 < row[1] < 100
+
+
+@pytest.fixture
+def small_db(tmp_path):
+    """A small OMI database for testing helpers without real data files."""
+    db_path = str(tmp_path / "small_omi.db")
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE omi_values (
+            area TEXT, region TEXT, province TEXT, comune_istat TEXT,
+            comune_name TEXT, fascia TEXT, zona TEXT, link_zona TEXT,
+            property_type_code TEXT, property_type TEXT, condition TEXT,
+            buy_min REAL, buy_max REAL, rent_min REAL, rent_max REAL
+        )
+    """)
+    conn.executemany(
+        "INSERT INTO omi_values VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            ("SUD", "PUGLIA", "BA", "001", "Bari", "C", "B1", "link1", "20", "Abitazioni civili", "NORMALE", 800, 1200, 3.0, 5.0),
+            ("SUD", "PUGLIA", "LE", "002", "Lecce", "C", "B2", "link2", "20", "Abitazioni civili", "NORMALE", 600, 900, 2.5, 4.0),
+            ("SUD", "SICILIA", "PA", "003", "Palermo", "C", "B3", "link3", "20", "Abitazioni civili", "NORMALE", 500, 800, 2.0, 3.5),
+            ("NORD", "LOMBARDIA", "MI", "004", "Milano", "C", "B4", "link4", "20", "Abitazioni civili", "NORMALE", 2000, 4000, 8.0, 15.0),
+        ],
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+class TestGetRegions:
+    def test_returns_distinct_sorted_regions(self, small_db):
+        regions = get_regions(small_db)
+        assert regions == ["LOMBARDIA", "PUGLIA", "SICILIA"]
+
+    def test_empty_db(self, tmp_path):
+        db_path = str(tmp_path / "empty.db")
+        conn = sqlite3.connect(db_path)
+        conn.execute("""
+            CREATE TABLE omi_values (
+                area TEXT, region TEXT, province TEXT, comune_istat TEXT,
+                comune_name TEXT, fascia TEXT, zona TEXT, link_zona TEXT,
+                property_type_code TEXT, property_type TEXT, condition TEXT,
+                buy_min REAL, buy_max REAL, rent_min REAL, rent_max REAL
+            )
+        """)
+        conn.commit()
+        conn.close()
+        assert get_regions(db_path) == []
+
+
+class TestGetProvinces:
+    def test_returns_provinces_for_region(self, small_db):
+        provinces = get_provinces(small_db, "PUGLIA")
+        assert provinces == ["BA", "LE"]
+
+    def test_unknown_region_returns_empty(self, small_db):
+        assert get_provinces(small_db, "NOWHERE") == []
 
 
 class TestQueryZones:

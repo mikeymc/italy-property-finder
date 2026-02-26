@@ -150,6 +150,25 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     conn.close()
 
 
+def get_regions(db_path: str) -> list[str]:
+    """Return sorted list of distinct regions in the OMI database."""
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute("SELECT DISTINCT region FROM omi_values ORDER BY region").fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
+def get_provinces(db_path: str, region: str) -> list[str]:
+    """Return sorted list of distinct provinces for a region."""
+    conn = sqlite3.connect(db_path)
+    rows = conn.execute(
+        "SELECT DISTINCT province FROM omi_values WHERE region = ? ORDER BY province",
+        (region,),
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def query_zones(
     db_path: str,
     region: Optional[str] = None,
