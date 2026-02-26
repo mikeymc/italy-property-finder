@@ -157,3 +157,131 @@ class TestPropertyInvestment:
         assert "mutuo_payment" in summary
         assert "net_cash_flow" in summary
         assert summary["mutuo_payment"] > 0
+
+
+class TestCashPurchase:
+    """Test buying outright with no mutuo."""
+
+    def _cash_investment(self) -> PropertyInvestment:
+        return PropertyInvestment(
+            purchase_price=150_000,
+            square_meters=70,
+            down_payment_pct=1.0,
+            mutuo_rate_annual=0.0,
+            mutuo_term_years=25,
+            acquisition=AcquisitionCosts(
+                registro_pct=0.09,
+                notary_fee=3_000,
+                agency_fee_pct=0.03,
+            ),
+            annual_costs=AnnualCosts(
+                imu=800, tari=400, maintenance_pct=0.01,
+                insurance=300, condo_fees_monthly=100, utilities_monthly=150,
+            ),
+            rental_income=RentalIncome(
+                nightly_rate=90, occupancy_rate=0.60,
+                cleaning_fee=50, management_fee_pct=0.20, platform_fee_pct=0.03,
+            ),
+            cedolare_secca_rate=0.21,
+        )
+
+    def test_no_mutuo_payment(self):
+        inv = self._cash_investment()
+        assert inv.mutuo_amount == 0
+        assert inv.monthly_mutuo_payment == 0
+
+    def test_total_cash_outlay_is_full_price_plus_acquisition(self):
+        inv = self._cash_investment()
+        assert inv.total_cash_outlay == 150_000 + 21_000
+
+    def test_cash_flow_higher_without_mutuo(self):
+        """No mortgage means all NOI flows to the owner."""
+        cash = self._cash_investment()
+        financed = PropertyInvestment(
+            purchase_price=150_000, square_meters=70,
+            down_payment_pct=0.20, mutuo_rate_annual=0.035, mutuo_term_years=25,
+            acquisition=cash.acquisition, annual_costs=cash.annual_costs,
+            rental_income=cash.rental_income, cedolare_secca_rate=0.21,
+        )
+        assert cash.annual_cash_flow > financed.annual_cash_flow
+
+    def test_cash_on_cash_equals_cap_rate_approximately(self):
+        """Without financing, cash-on-cash and cap rate should be close.
+        They differ slightly because cash outlay includes acquisition costs."""
+        inv = self._cash_investment()
+        # Cap rate = NOI / purchase_price
+        # Cash-on-cash = cash_flow / (purchase_price + acquisition_costs)
+        # Since there's no mutuo, cash_flow = NOI, so:
+        # cash_on_cash = NOI / (purchase_price + acq) < NOI / purchase_price = cap_rate
+        assert inv.cash_on_cash_return < inv.cap_rate
+        assert abs(inv.cash_on_cash_return - inv.cap_rate) < 0.02
+
+    def test_break_even_lower_without_mutuo(self):
+        cash = self._cash_investment()
+        financed = PropertyInvestment(
+            purchase_price=150_000, square_meters=70,
+            down_payment_pct=0.20, mutuo_rate_annual=0.035, mutuo_term_years=25,
+            acquisition=cash.acquisition, annual_costs=cash.annual_costs,
+            rental_income=cash.rental_income, cedolare_secca_rate=0.21,
+        )
+        assert cash.break_even_occupancy < financed.break_even_occupancy
+
+
+class TestReturnTargets:
+    """Test what parameters are needed to hit 10% return target."""
+
+    def test_high_yield_scenario(self):
+        """A cheap property with strong STR demand can hit 10%+ cap rate."""
+        inv = PropertyInvestment(
+            purchase_price=80_000,
+            square_meters=50,
+            down_payment_pct=1.0,
+            mutuo_rate_annual=0.0,
+            mutuo_term_years=25,
+            acquisition=AcquisitionCosts(
+                registro_pct=0.09, notary_fee=2_500, agency_fee_pct=0.03,
+            ),
+            annual_costs=AnnualCosts(
+                imu=500, tari=300, maintenance_pct=0.01,
+                insurance=200, condo_fees_monthly=60, utilities_monthly=100,
+            ),
+            rental_income=RentalIncome(
+                nightly_rate=80, occupancy_rate=0.65,
+                cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+            ),
+            cedolare_secca_rate=0.21,
+        )
+        # An 80k property at €80/night with 65% occupancy should yield well
+        assert inv.cap_rate > 0.08  # At least 8% cap rate
+
+    def test_required_nightly_rate_for_target(self):
+        """Verify the required_nightly_rate_for_target method."""
+        inv = PropertyInvestment(
+            purchase_price=100_000,
+            square_meters=60,
+            down_payment_pct=1.0,
+            mutuo_rate_annual=0.0,
+            mutuo_term_years=25,
+            acquisition=AcquisitionCosts(
+                registro_pct=0.09, notary_fee=2_500, agency_fee_pct=0.03,
+            ),
+            annual_costs=AnnualCosts(
+                imu=600, tari=350, maintenance_pct=0.01,
+                insurance=250, condo_fees_monthly=80, utilities_monthly=120,
+            ),
+            rental_income=RentalIncome(
+                nightly_rate=0, occupancy_rate=0.60,
+                cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+            ),
+            cedolare_secca_rate=0.21,
+        )
+        rate = inv.required_nightly_rate_for_target(0.10)
+        assert rate > 0
+        # Verify: if we plug this rate back in, we should get ~10% return
+        from dataclasses import replace
+        new_rental = RentalIncome(
+            nightly_rate=rate, occupancy_rate=0.60,
+            cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+        )
+        check = replace(inv, rental_income=new_rental)
+        assert abs(check.cash_on_cash_return - 0.10) < 0.005

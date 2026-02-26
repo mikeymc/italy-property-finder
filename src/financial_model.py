@@ -182,6 +182,31 @@ class PropertyInvestment:
 
         return net_rental - expenses - tax - mutuo
 
+    def required_nightly_rate_for_target(self, target_return: float) -> float:
+        """Find the nightly rate needed to achieve a target cash-on-cash return.
+
+        Uses binary search since the relationship between nightly rate and
+        return is monotonic but involves integer rounding (occupied nights).
+        """
+        from dataclasses import replace
+        low, high = 0.0, 1000.0
+        for _ in range(100):
+            mid = (low + high) / 2
+            test_rental = RentalIncome(
+                nightly_rate=mid,
+                occupancy_rate=self.rental_income.occupancy_rate,
+                cleaning_fee=self.rental_income.cleaning_fee,
+                management_fee_pct=self.rental_income.management_fee_pct,
+                platform_fee_pct=self.rental_income.platform_fee_pct,
+                avg_stay_nights=self.rental_income.avg_stay_nights,
+            )
+            test_inv = replace(self, rental_income=test_rental)
+            if test_inv.cash_on_cash_return < target_return:
+                low = mid
+            else:
+                high = mid
+        return (low + high) / 2
+
     def monthly_summary(self) -> dict:
         return {
             "gross_rental": self.gross_rental_income_annual / 12,
