@@ -12,6 +12,8 @@ from src.airbnb_scraper import (
     parse_nightly_rate,
     AirbnbListing,
     build_bounds_params,
+    location_slug,
+    search_listings,
 )
 
 
@@ -163,6 +165,45 @@ class TestParseSearchResults:
     def test_no_guest_favorite_badge(self):
         listings = parse_search_results([SAMPLE_DISCOUNTED_RESULT])
         assert listings[0].is_guest_favorite is False
+
+
+class TestLocationSlug:
+    """Unit tests for URL slug conversion."""
+
+    def test_comma_space_becomes_double_dash(self):
+        assert location_slug("CHIETI, Italy") == "CHIETI--Italy"
+
+    def test_multiple_spaces_collapsed(self):
+        assert location_slug("  Chieti ,  Italy  ") == "Chieti--Italy"
+
+    def test_single_word(self):
+        assert location_slug("Rome") == "Rome"
+
+    def test_city_province_country(self):
+        assert location_slug("Amalfi, SA, Italy") == "Amalfi--SA--Italy"
+
+
+class TestSearchListingsLocation:
+    """Integration test: verify search_listings returns results in the right city.
+
+    Chieti is at approximately lat=42.35, lng=14.17.
+    Altamura (the wrong result) is at lat=40.83, lng=16.56.
+    """
+
+    def test_chieti_query_returns_chieti_listings(self):
+        listings, _ = search_listings("CHIETI, Italy", "2025-07-01", "2025-07-06")
+        assert len(listings) > 0, "Expected listings for Chieti"
+
+        # All listings should be within ~0.5 degrees of Chieti centre
+        chieti_lat, chieti_lng = 42.35, 14.17
+        for listing in listings:
+            if listing.latitude is not None and listing.longitude is not None:
+                assert abs(listing.latitude - chieti_lat) < 0.5, (
+                    f"Listing lat {listing.latitude} is not near Chieti ({chieti_lat})"
+                )
+                assert abs(listing.longitude - chieti_lng) < 0.5, (
+                    f"Listing lng {listing.longitude} is not near Chieti ({chieti_lng})"
+                )
 
 
 class TestBuildBoundsParams:

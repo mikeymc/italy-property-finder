@@ -148,6 +148,16 @@ def _extract_search_data(html: str) -> Optional[dict]:
     return json.loads(match.group(1))
 
 
+def location_slug(query: str) -> str:
+    """Convert a location query to Airbnb's URL path slug format.
+
+    Airbnb uses double-dashes between location parts, not comma-space.
+    'CHIETI, Italy' -> 'CHIETI--Italy'
+    """
+    parts = [p.strip() for p in query.split(",")]
+    return "--".join(p for p in parts if p)
+
+
 def search_listings(
     query: str,
     checkin: str,
@@ -169,7 +179,7 @@ def search_listings(
         params["cursor"] = cursor
 
     resp = requests.get(
-        f"https://www.airbnb.com/s/{query}/homes",
+        f"https://www.airbnb.com/s/{location_slug(query)}/homes",
         params=params,
         impersonate="chrome",
         timeout=30,
@@ -246,8 +256,14 @@ def search_by_bounds(
             time.sleep(REQUEST_DELAY_SECONDS)
 
         params = build_bounds_params(
-            ne_lat=ne_lat, ne_lng=ne_lng, sw_lat=sw_lat, sw_lng=sw_lng,
-            checkin=checkin, checkout=checkout, adults=adults, cursor=cursor,
+            ne_lat=ne_lat,
+            ne_lng=ne_lng,
+            sw_lat=sw_lat,
+            sw_lng=sw_lng,
+            checkin=checkin,
+            checkout=checkout,
+            adults=adults,
+            cursor=cursor,
         )
 
         resp = requests.get(
@@ -280,7 +296,9 @@ def search_by_bounds(
         all_listings.extend(listings)
         logger.info(
             "Bounds page %d: found %d listings (total: %d)",
-            page + 1, len(listings), len(all_listings),
+            page + 1,
+            len(listings),
+            len(all_listings),
         )
 
         if not next_cursor or not listings:
