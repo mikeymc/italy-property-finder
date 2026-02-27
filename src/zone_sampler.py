@@ -149,7 +149,7 @@ def _save_zone_listings(db_path: str, link_zona: str, listings: list[AirbnbListi
                 is_guest_favorite, scraped_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
-                None,
+                link_zona,
                 link_zona,
                 listing.listing_id,
                 listing.title,
