@@ -8,6 +8,8 @@ from unittest.mock import patch
 
 from src.api import create_app
 from src.database import init_db
+from src.zone_sampler import init_sampling_tables
+from src.str_metrics import init_str_metrics_table
 
 
 @pytest.fixture
@@ -54,8 +56,10 @@ def db_path(tmp_path):
     conn.commit()
     conn.close()
 
-    # Init airbnb/scrape tables
+    # Init airbnb/scrape tables and sampling/metrics tables
     init_db(path)
+    init_sampling_tables(path)
+    init_str_metrics_table(path)
     return path
 
 
@@ -172,3 +176,64 @@ class TestAirbnbListingsEndpoint:
     def test_missing_query_param(self, client):
         resp = client.get("/api/airbnb-listings")
         assert resp.status_code == 400
+
+
+class TestZonesStrDataFlag:
+    def test_zones_include_has_str_data_false_by_default(self, client):
+        resp = client.get("/api/zones")
+        data = resp.get_json()
+        assert all("has_str_data" in z for z in data)
+        assert all(z["has_str_data"] is False for z in data)
+
+    def test_zones_has_str_data_true_when_metrics_exist(self, client, db_path):
+        conn = sqlite3.connect(db_path)
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO zone_str_metrics (link_zona, median_nightly_rate, listing_count, computed_at) VALUES (?, ?, ?, ?)",
+            ("link1", 95.0, 12, now),
+        )
+        conn.commit()
+        conn.close()
+
+        resp = client.get("/api/zones?province=BA")
+        data = resp.get_json()
+        assert len(data) == 1
+        assert data[0]["has_str_data"] is True
+
+
+class TestSamplingEndpoints:
+    def test_sample_start_requires_province_or_region(self, client):
+        resp = client.post("/api/sample/start", json={})
+        assert resp.status_code == 400
+
+    def test_sample_start_accepts_province(self, client, db_path):
+        # Add a zone with bbox so there's something to sample
+        conn = sqlite3.connect(db_path)
+        conn.execute(
+            "ALTER TABLE omi_zones ADD COLUMN ne_lat REAL"
+        )
+        conn.execute("ALTER TABLE omi_zones ADD COLUMN ne_lng REAL")
+        conn.execute("ALTER TABLE omi_zones ADD COLUMN sw_lat REAL")
+        conn.execute("ALTER TABLE omi_zones ADD COLUMN sw_lng REAL")
+        conn.execute(
+            "UPDATE omi_zones SET ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1 WHERE link_zona='link1'"
+        )
+        conn.commit()
+        conn.close()
+
+        resp = client.post("/api/sample/start", json={"province": "BA"})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "job_id" in data
+
+    def test_sample_status(self, client):
+        resp = client.get("/api/sample/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "sampled" in data
+        assert "total" in data
+
+    def test_sample_stop(self, client):
+        resp = client.post("/api/sample/stop")
+        assert resp.status_code == 200

@@ -185,7 +185,8 @@ def query_zones(
     query = """
         SELECT v.region, v.province, v.comune_name, v.zona,
                z.zona_desc, v.property_type, v.condition,
-               v.buy_min, v.buy_max, v.rent_min, v.rent_max
+               v.buy_min, v.buy_max, v.rent_min, v.rent_max,
+               v.link_zona
         FROM omi_values v
         LEFT JOIN omi_zones z ON v.link_zona = z.link_zona
         WHERE v.property_type = ? AND v.condition = ?

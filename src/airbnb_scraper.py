@@ -198,6 +198,98 @@ def search_listings(
     return listings, next_cursor
 
 
+def build_bounds_params(
+    ne_lat: float,
+    ne_lng: float,
+    sw_lat: float,
+    sw_lng: float,
+    checkin: str,
+    checkout: str,
+    adults: int = 2,
+    cursor: Optional[str] = None,
+) -> dict:
+    """Build Airbnb search params for a geographic bounding box."""
+    params = {
+        "tab_id": "home_tab",
+        "refinement_paths[]": "/homes",
+        "checkin": checkin,
+        "checkout": checkout,
+        "adults": adults,
+        "price_filter_num_nights": 5,
+        "ne_lat": ne_lat,
+        "ne_lng": ne_lng,
+        "sw_lat": sw_lat,
+        "sw_lng": sw_lng,
+        "search_type": "user_map_move",
+    }
+    if cursor:
+        params["cursor"] = cursor
+    return params
+
+
+def search_by_bounds(
+    ne_lat: float,
+    ne_lng: float,
+    sw_lat: float,
+    sw_lng: float,
+    checkin: str,
+    checkout: str,
+    max_pages: int = 3,
+    adults: int = 2,
+) -> list[AirbnbListing]:
+    """Search Airbnb listings within a bounding box. Returns all listings found."""
+    all_listings = []
+    cursor = None
+
+    for page in range(max_pages):
+        if page > 0:
+            time.sleep(REQUEST_DELAY_SECONDS)
+
+        params = build_bounds_params(
+            ne_lat=ne_lat, ne_lng=ne_lng, sw_lat=sw_lat, sw_lng=sw_lng,
+            checkin=checkin, checkout=checkout, adults=adults, cursor=cursor,
+        )
+
+        resp = requests.get(
+            "https://www.airbnb.com/s/homes",
+            params=params,
+            impersonate="chrome",
+            timeout=30,
+        )
+
+        if resp.status_code != 200:
+            logger.warning("Airbnb bounds search returned %d", resp.status_code)
+            break
+
+        data = _extract_search_data(resp.text)
+        if not data:
+            logger.warning("Could not extract search data from bounds response")
+            break
+
+        try:
+            stays = data["niobeClientData"][0][1]["data"]["presentation"]["staysSearch"]
+            results = stays["results"]
+            raw_listings = results["searchResults"]
+            pagination = results.get("paginationInfo", {})
+            next_cursor = pagination.get("nextPageCursor")
+        except (KeyError, IndexError) as e:
+            logger.warning("Unexpected data structure in bounds response: %s", e)
+            break
+
+        listings = parse_search_results(raw_listings)
+        all_listings.extend(listings)
+        logger.info(
+            "Bounds page %d: found %d listings (total: %d)",
+            page + 1, len(listings), len(all_listings),
+        )
+
+        if not next_cursor or not listings:
+            break
+        cursor = next_cursor
+
+    return all_listings
+
+
 def search_area(
     query: str,
     checkin: str,

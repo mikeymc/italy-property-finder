@@ -2,6 +2,7 @@
 # ABOUTME: Single-user tool with background scrape threads and SQLite-backed caching.
 
 import threading
+import uuid
 
 from flask import Flask, jsonify, request
 
@@ -21,15 +22,29 @@ from src.financial_model import (
     RentalIncome,
 )
 from src.omi_data import get_provinces, get_regions, query_zones
+from src.str_metrics import init_str_metrics_table, update_zone_str_metrics
+from src.zone_sampler import (
+    get_zones_to_sample,
+    init_sampling_tables,
+    sample_zone,
+)
+
+# State for the background zone sampling job
+_sampling_active = False
+_sampling_job_id: str | None = None
 
 
 def create_app(db_path: str) -> Flask:
     app = Flask(__name__)
     app.config["DB_PATH"] = db_path
     init_db(db_path)
+    init_sampling_tables(db_path)
+    init_str_metrics_table(db_path)
 
     @app.route("/api/zones")
     def zones():
+        import sqlite3 as _sqlite3
+
         region = request.args.get("region")
         province = request.args.get("province")
         max_price = request.args.get("max_price", type=float)
@@ -42,6 +57,18 @@ def create_app(db_path: str) -> Flask:
             max_buy_price_sqm=max_price,
             min_rent_sqm=min_rent,
         )
+
+        # Attach STR data availability flag
+        conn = _sqlite3.connect(db_path)
+        sampled = {
+            row[0]
+            for row in conn.execute("SELECT link_zona FROM zone_str_metrics").fetchall()
+        }
+        conn.close()
+
+        for zone in results:
+            zone["has_str_data"] = zone.get("link_zona") in sampled
+
         return jsonify(results)
 
     @app.route("/api/zones/regions")
@@ -157,5 +184,64 @@ def create_app(db_path: str) -> Flask:
         if not query:
             return jsonify({"error": "query parameter required"}), 400
         return jsonify(get_listings(db_path, query))
+
+    @app.route("/api/sample/start", methods=["POST"])
+    def sample_start():
+        global _sampling_active, _sampling_job_id
+
+        data = request.get_json() or {}
+        province = data.get("province")
+        region = data.get("region")
+
+        if not province and not region:
+            return jsonify({"error": "Required: province or region"}), 400
+
+        zones = get_zones_to_sample(db_path, province=province, region=region)
+        if not zones:
+            return jsonify({"job_id": None, "zones_queued": 0, "message": "No unsampled zones with bounding box found"})
+
+        job_id = uuid.uuid4().hex[:12]
+        _sampling_job_id = job_id
+        _sampling_active = True
+
+        def run_sampling():
+            global _sampling_active
+            for zone in zones:
+                if not _sampling_active:
+                    break
+                sample_zone(db_path, zone)
+                update_zone_str_metrics(db_path, zone["link_zona"])
+            _sampling_active = False
+
+        thread = threading.Thread(target=run_sampling, daemon=True)
+        thread.start()
+
+        return jsonify({"job_id": job_id, "zones_queued": len(zones)})
+
+    @app.route("/api/sample/status")
+    def sample_status():
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(db_path)
+        sampled = conn.execute("SELECT COUNT(*) FROM zone_sampling_status").fetchone()[0]
+        # Count zones with bounding boxes (column added by load_zone_bboxes; may not exist yet)
+        try:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM omi_zones WHERE ne_lat IS NOT NULL"
+            ).fetchone()[0]
+        except Exception:
+            total = conn.execute("SELECT COUNT(*) FROM omi_zones").fetchone()[0]
+        conn.close()
+        return jsonify({
+            "active": _sampling_active,
+            "job_id": _sampling_job_id,
+            "sampled": sampled,
+            "total": total,
+        })
+
+    @app.route("/api/sample/stop", methods=["POST"])
+    def sample_stop():
+        global _sampling_active
+        _sampling_active = False
+        return jsonify({"stopped": True})
 
     return app

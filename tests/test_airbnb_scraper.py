@@ -11,6 +11,7 @@ from src.airbnb_scraper import (
     parse_search_results,
     parse_nightly_rate,
     AirbnbListing,
+    build_bounds_params,
 )
 
 
@@ -162,3 +163,48 @@ class TestParseSearchResults:
     def test_no_guest_favorite_badge(self):
         listings = parse_search_results([SAMPLE_DISCOUNTED_RESULT])
         assert listings[0].is_guest_favorite is False
+
+
+class TestBuildBoundsParams:
+    """Tests for the bounding-box parameter builder used in zone sampling."""
+
+    def test_includes_bbox_coords(self):
+        params = build_bounds_params(
+            ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1,
+            checkin="2025-06-01", checkout="2025-06-06",
+        )
+        assert params["ne_lat"] == pytest.approx(40.9)
+        assert params["ne_lng"] == pytest.approx(14.3)
+        assert params["sw_lat"] == pytest.approx(40.7)
+        assert params["sw_lng"] == pytest.approx(14.1)
+
+    def test_includes_checkin_checkout(self):
+        params = build_bounds_params(
+            ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1,
+            checkin="2025-06-01", checkout="2025-06-06",
+        )
+        assert params["checkin"] == "2025-06-01"
+        assert params["checkout"] == "2025-06-06"
+
+    def test_includes_required_airbnb_params(self):
+        params = build_bounds_params(
+            ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1,
+            checkin="2025-06-01", checkout="2025-06-06",
+        )
+        assert params["tab_id"] == "home_tab"
+        assert params["refinement_paths[]"] == "/homes"
+
+    def test_cursor_included_when_provided(self):
+        params = build_bounds_params(
+            ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1,
+            checkin="2025-06-01", checkout="2025-06-06",
+            cursor="abc123",
+        )
+        assert params["cursor"] == "abc123"
+
+    def test_cursor_absent_when_not_provided(self):
+        params = build_bounds_params(
+            ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1,
+            checkin="2025-06-01", checkout="2025-06-06",
+        )
+        assert "cursor" not in params
