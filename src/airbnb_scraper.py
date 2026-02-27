@@ -251,7 +251,7 @@ def search_by_bounds(
         )
 
         resp = requests.get(
-            "https://www.airbnb.com/s/homes",
+            "https://www.airbnb.com/s/Italy/homes",
             params=params,
             impersonate="chrome",
             timeout=30,
