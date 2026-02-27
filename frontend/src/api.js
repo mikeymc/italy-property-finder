@@ -51,3 +51,23 @@ export async function getScrapeStatus(jobId) {
 export async function getAirbnbListings(query) {
   return fetchJson(`${BASE}/airbnb-listings?query=${encodeURIComponent(query)}`);
 }
+
+export async function startSampling({ province, region } = {}) {
+  const resp = await fetch(`${BASE}/sample/start`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ province, region }),
+  });
+  if (!resp.ok) throw new Error('Failed to start sampling');
+  return resp.json();
+}
+
+export async function getSamplingStatus() {
+  return fetchJson(`${BASE}/sample/status`);
+}
+
+export async function stopSampling() {
+  const resp = await fetch(`${BASE}/sample/stop`, { method: 'POST' });
+  if (!resp.ok) throw new Error('Failed to stop sampling');
+  return resp.json();
+}

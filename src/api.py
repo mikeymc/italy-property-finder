@@ -58,16 +58,22 @@ def create_app(db_path: str) -> Flask:
             min_rent_sqm=min_rent,
         )
 
-        # Attach STR data availability flag
+        # Attach STR metrics where available
         conn = _sqlite3.connect(db_path)
-        sampled = {
-            row[0]
-            for row in conn.execute("SELECT link_zona FROM zone_str_metrics").fetchall()
+        conn.row_factory = _sqlite3.Row
+        str_metrics = {
+            row["link_zona"]: dict(row)
+            for row in conn.execute(
+                "SELECT link_zona, median_nightly_rate, listing_count FROM zone_str_metrics"
+            ).fetchall()
         }
         conn.close()
 
         for zone in results:
-            zone["has_str_data"] = zone.get("link_zona") in sampled
+            metrics = str_metrics.get(zone.get("link_zona"))
+            zone["has_str_data"] = metrics is not None
+            zone["median_nightly_rate"] = metrics["median_nightly_rate"] if metrics else None
+            zone["str_listing_count"] = metrics["listing_count"] if metrics else None
 
         return jsonify(results)
 

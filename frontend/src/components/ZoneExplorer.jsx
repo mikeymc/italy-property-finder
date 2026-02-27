@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { getZones } from '../api';
+import { useState, useEffect, useCallback } from 'react';
+import { getZones, startSampling, getSamplingStatus, stopSampling } from '../api';
 import { ZoneFilters } from './ZoneFilters';
 import { ZoneMap } from './ZoneMap';
 
@@ -16,6 +16,8 @@ export function ZoneExplorer({ onSelectZone }) {
   const [sortAsc, setSortAsc] = useState(false);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState('map'); // 'map' or 'table'
+  const [samplingStatus, setSamplingStatus] = useState(null);
+  const [samplingError, setSamplingError] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -24,6 +26,40 @@ export function ZoneExplorer({ onSelectZone }) {
       .catch(() => setZones([]))
       .finally(() => setLoading(false));
   }, [filters]);
+
+  // Poll sampling status when active
+  useEffect(() => {
+    getSamplingStatus().then(setSamplingStatus).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!samplingStatus?.active) return;
+    const interval = setInterval(() => {
+      getSamplingStatus()
+        .then((s) => {
+          setSamplingStatus(s);
+          // Refresh zones when sampling completes to pick up new has_str_data flags
+          if (!s.active) {
+            getZones(filters).then(setZones).catch(() => {});
+          }
+        })
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [samplingStatus?.active, filters]);
+
+  const handleStartSampling = useCallback(() => {
+    setSamplingError(null);
+    startSampling({ province: filters.province, region: filters.region })
+      .then((result) => {
+        setSamplingStatus((s) => ({ ...s, active: true, zones_queued: result.zones_queued }));
+      })
+      .catch((err) => setSamplingError(err.message));
+  }, [filters.province, filters.region]);
+
+  const handleStopSampling = useCallback(() => {
+    stopSampling().then(() => setSamplingStatus((s) => ({ ...s, active: false }))).catch(() => {});
+  }, []);
 
   const handleSort = (key) => {
     if (sortKey === key) {
@@ -68,6 +104,28 @@ export function ZoneExplorer({ onSelectZone }) {
         </div>
       </div>
       <ZoneFilters filters={filters} onChange={setFilters} />
+
+      <div className="sampling-controls">
+        {samplingStatus && (
+          <span className="sampling-progress">
+            STR sampled: {samplingStatus.sampled}/{samplingStatus.total} zones
+            {samplingStatus.active && ' (running…)'}
+          </span>
+        )}
+        {samplingStatus?.active ? (
+          <button className="btn-stop" onClick={handleStopSampling}>Stop Sampling</button>
+        ) : (
+          <button
+            className="btn-sample"
+            onClick={handleStartSampling}
+            disabled={!filters.province && !filters.region}
+            title={!filters.province && !filters.region ? 'Select a region or province first' : 'Sample Airbnb data for visible zones'}
+          >
+            Sample Airbnb Data
+          </button>
+        )}
+        {samplingError && <span className="sampling-error">{samplingError}</span>}
+      </div>
 
       {loading ? (
         <p className="loading">Loading zones...</p>

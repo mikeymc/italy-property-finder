@@ -20,13 +20,15 @@ export function AnalysisPanel({ zone }) {
   });
   const [analysis, setAnalysis] = useState(null);
 
-  // When a zone is selected, pre-fill price from OMI data
+  // When a zone is selected, pre-fill price from OMI data and nightly rate from STR metrics
   useEffect(() => {
     if (zone) {
       const avgBuy = ((zone.buy_min || 0) + (zone.buy_max || 0)) / 2;
       setParams((p) => ({
         ...p,
         purchase_price: Math.round(avgBuy * p.square_meters),
+        // Use sampled median nightly rate if available, otherwise keep current value
+        ...(zone.median_nightly_rate ? { nightly_rate: Math.round(zone.median_nightly_rate) } : {}),
       }));
     }
   }, [zone]);
@@ -58,6 +60,12 @@ export function AnalysisPanel({ zone }) {
       {zone && (
         <p className="zone-label">
           {zone.comune_name} ({zone.province}) — Zone {zone.zona}
+          {zone.has_str_data && (
+            <span className="str-badge sampled">● Sampled STR data</span>
+          )}
+          {zone && !zone.has_str_data && (
+            <span className="str-badge estimated">○ Estimated</span>
+          )}
         </p>
       )}
 

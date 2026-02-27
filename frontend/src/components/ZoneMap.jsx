@@ -13,11 +13,11 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
     const geojsonUrl = '/zones.geojson';
 
     // Fast lookup and color calc
-    const { zoneLookup, fillColorExpression } = useMemo(() => {
+    const { zoneLookup, fillColorExpression, strSampledNames } = useMemo(() => {
         const map = new Map();
 
         if (!zonesForLookup || zonesForLookup.length === 0) {
-            return { zoneLookup: map, fillColorExpression: '#088' };
+            return { zoneLookup: map, fillColorExpression: '#088', strSampledNames: new Set() };
         }
 
         const validYields = [];
@@ -35,7 +35,7 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
         });
 
         if (validYields.length === 0) {
-            return { zoneLookup: map, fillColorExpression: '#088' };
+            return { zoneLookup: map, fillColorExpression: '#088', strSampledNames: new Set() };
         }
 
         // Sort ascending to easily compute rank/percentiles
@@ -65,10 +65,17 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
 
         // Mapbox match expression must have at least one label/value pair (so length >= 4)
         if (matchExpr.length < 4) {
-            return { zoneLookup: map, fillColorExpression: '#088' };
+            return { zoneLookup: map, fillColorExpression: '#088', strSampledNames: new Set() };
         }
 
-        return { zoneLookup: map, fillColorExpression: matchExpr };
+        // Collect names of zones that have sampled STR data for border highlighting
+        const strSampledNames = new Set(
+            zonesForLookup
+                .filter(z => z.has_str_data)
+                .map(z => `${z.comune_name.toUpperCase()} - Zona OMI ${z.zona}`)
+        );
+
+        return { zoneLookup: map, fillColorExpression: matchExpr, strSampledNames };
     }, [zonesForLookup]);
 
     const fillLayerStyle = {
@@ -94,6 +101,19 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
             'line-opacity': 0.2
         }
     };
+
+    // Highlighted border for zones with real sampled STR data
+    const sampledNamesArray = Array.from(strSampledNames || []);
+    const strBorderLayerStyle = sampledNamesArray.length > 0 ? {
+        id: 'zones-str-border',
+        type: 'line',
+        filter: ['in', ['get', 'name'], ['literal', sampledNamesArray]],
+        paint: {
+            'line-color': '#0066ff',
+            'line-width': 1.5,
+            'line-opacity': 0.8,
+        }
+    } : null;
 
     // Find full zone detail when clicked
     const handleMapClick = (event) => {
@@ -131,7 +151,9 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
                                 x: e.point.x,
                                 y: e.point.y,
                                 zone: uniqueName,
-                                yield: yld
+                                yield: yld,
+                                hasStrData: matchedZone?.has_str_data || false,
+                                medianRate: matchedZone?.median_nightly_rate || null,
                             });
                         } else {
                             setHoverInfo(null);
@@ -142,6 +164,7 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
                     <Source id="omi-zones" type="geojson" data={geojsonUrl} generateId={true}>
                         <Layer {...fillLayerStyle} />
                         <Layer {...lineLayerStyle} />
+                        {strBorderLayerStyle && <Layer {...strBorderLayerStyle} />}
                     </Source>
 
                     <NavigationControl position="bottom-right" />
@@ -169,6 +192,11 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
                             <div style={{ color: hoverInfo.yield ? '#1a9850' : '#888', fontWeight: hoverInfo.yield ? 'bold' : 'normal' }}>
                                 {hoverInfo.yield !== null ? `Yield: ${hoverInfo.yield.toFixed(1)}%` : 'Yield: N/A'}
                             </div>
+                            {hoverInfo.hasStrData && hoverInfo.medianRate && (
+                                <div style={{ color: '#0066ff', fontSize: '12px', marginTop: '2px' }}>
+                                    ● Sampled: €{Math.round(hoverInfo.medianRate)}/night
+                                </div>
+                            )}
                         </div>
                     )}
                 </MapGL>
