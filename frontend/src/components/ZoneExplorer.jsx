@@ -3,7 +3,7 @@ import { getZones } from '../api';
 import { ZoneFilters } from './ZoneFilters';
 import { ZoneMap } from './ZoneMap';
 
-function grossYield(zone) {
+export function grossYield(zone) {
   if (!zone.rent_min || !zone.buy_min || zone.buy_min === 0) return null;
   // Annualized rent / buy price (both per sqm)
   return ((zone.rent_min * 12) / zone.buy_min) * 100;

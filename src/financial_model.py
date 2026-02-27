@@ -7,36 +7,40 @@ from dataclasses import dataclass, field
 @dataclass
 class AcquisitionCosts:
     """One-time costs at purchase."""
-    registro_pct: float          # Imposta di registro (9% second home, 2% first home)
-    notary_fee: float            # Notary flat fee
-    agency_fee_pct: float        # Real estate agent fee as % of purchase price
+
+    registro_pct: float  # Imposta di registro (9% second home, 2% first home)
+    notary_fee: float  # Notary flat fee
+    agency_fee_pct: float  # Real estate agent fee as % of purchase price
 
 
 @dataclass
 class AnnualCosts:
     """Recurring annual costs of ownership."""
-    imu: float                   # Property tax (based on cadastral value)
-    tari: float                  # Waste tax
-    maintenance_pct: float       # Annual maintenance as % of purchase price
-    insurance: float             # Annual insurance
-    condo_fees_monthly: float    # Monthly condominium fees
-    utilities_monthly: float     # Monthly utilities when property is vacant
+
+    imu: float  # Property tax (based on cadastral value)
+    tari: float  # Waste tax
+    maintenance_pct: float  # Annual maintenance as % of purchase price
+    insurance: float  # Annual insurance
+    condo_fees_monthly: float  # Monthly condominium fees
+    utilities_monthly: float  # Monthly utilities when property is vacant
 
 
 @dataclass
 class RentalIncome:
     """Short-term rental income parameters."""
-    nightly_rate: float          # Average nightly rate
-    occupancy_rate: float        # Expected occupancy (0-1)
-    cleaning_fee: float          # Per-turnover cleaning fee charged to guests
-    management_fee_pct: float    # Property manager cut of gross revenue
-    platform_fee_pct: float      # Airbnb/Booking host fee
-    avg_stay_nights: int = 4     # Average guest stay length
+
+    nightly_rate: float  # Average nightly rate
+    occupancy_rate: float  # Expected occupancy (0-1)
+    cleaning_fee: float  # Per-turnover cleaning fee charged to guests
+    management_fee_pct: float  # Property manager cut of gross revenue
+    platform_fee_pct: float  # Airbnb/Booking host fee
+    avg_stay_nights: int = 4  # Average guest stay length
 
 
 @dataclass
 class PropertyInvestment:
     """Full financial model for an Italian rental property investment."""
+
     purchase_price: float
     square_meters: float
     down_payment_pct: float
@@ -131,12 +135,20 @@ class PropertyInvestment:
     @property
     def cash_on_cash_return(self) -> float:
         """Annual cash flow as percentage of total cash invested."""
+        if self.total_cash_outlay == 0:
+            return 0.0
         return self.annual_cash_flow / self.total_cash_outlay
 
     @property
     def cap_rate(self) -> float:
         """NOI / purchase price. Ignores financing — measures property's raw return."""
-        noi = self.net_rental_income_annual - self.annual_expenses - self.rental_income_tax
+        noi = (
+            self.net_rental_income_annual
+            - self.annual_expenses
+            - self.rental_income_tax
+        )
+        if self.purchase_price == 0:
+            return 0.0
         return noi / self.purchase_price
 
     @property
@@ -189,6 +201,7 @@ class PropertyInvestment:
         return is monotonic but involves integer rounding (occupied nights).
         """
         from dataclasses import replace
+
         low, high = 0.0, 1000.0
         for _ in range(100):
             mid = (low + high) / 2
