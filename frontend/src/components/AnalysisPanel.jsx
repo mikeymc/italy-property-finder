@@ -1,67 +1,53 @@
 // ABOUTME: ROI calculator with editable sliders for a selected OMI zone.
 // ABOUTME: Computes financial analysis via the API and displays results.
 
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { getAnalysis } from '../api';
 import { FinancialSummary } from './FinancialSummary';
 import { AirbnbListings } from './AirbnbListings';
 
-export function AnalysisPanel({ zone }) {
-  const [params, setParams] = useState({
-    purchase_price: 100000,
-    square_meters: 60,
-    nightly_rate: 80,
-    occupancy_rate: 0.6,
-    down_payment_pct: 0.2,
-    mutuo_rate: 0.04,
-    mutuo_term: 20,
-    management_fee_pct: 0.2,
-    platform_fee_pct: 0.15,
-    cleaning_fee: 50,
-    avg_stay_nights: 4,
-    registro_pct: 0.09,
-    notary_purchase_fee: 2500,
-    notary_mutuo_fee: 1500,
-    agency_fee_pct: 0.03,
-    mutuo_tax_pct: 0.02,
-    bank_origination_fee: 500,
-    appraisal_fee: 300,
-    technical_report_fee: 500,
-    cadastral_and_mortgage_taxes: 100,
-    imu: 1200,
-    tari: 300,
-    maintenance_pct: 0.01,
-    insurance: 400,
-    condo_fees_monthly: 50,
-    electricity_monthly: 60,
-    gas_monthly: 50,
-    water_monthly: 20,
-    internet_monthly: 30,
-    accountant_fee_annual: 400,
-  });
+export function AnalysisPanel({ zone, zoneOverrides, setZoneOverrides, defaultParams }) {
+
   const [analysis, setAnalysis] = useState(null);
 
-  // When a zone is selected, pre-fill price from OMI data and nightly rate from STR metrics
+  const zoneId = zone ? `${zone.comune_name.toUpperCase()} - Zona OMI ${zone.zona}` : null;
+  const overrides = zoneId ? (zoneOverrides[zoneId] || {}) : {};
+
+  const params = useMemo(() => {
+    if (!zone) return defaultParams;
+    const avgBuy = ((zone.buy_min || 0) + (zone.buy_max || 0)) / 2;
+    const baseSqM = overrides.square_meters ?? defaultParams.square_meters;
+    const purchase_price = avgBuy > 0 ? Math.round(avgBuy * baseSqM) : defaultParams.purchase_price;
+    const nightly_rate = (zone.has_str_data && zone.median_nightly_rate) ? Math.round(zone.median_nightly_rate) : defaultParams.nightly_rate;
+
+    return {
+      ...defaultParams,
+      purchase_price,
+      nightly_rate,
+      ...overrides
+    };
+  }, [zone, overrides, defaultParams]);
+
+  // When a zone is selected or parameters change, fetch analysis
   useEffect(() => {
     if (zone) {
-      const avgBuy = ((zone.buy_min || 0) + (zone.buy_max || 0)) / 2;
-      setParams((p) => ({
-        ...p,
-        purchase_price: Math.round(avgBuy * p.square_meters),
-        // Use sampled median nightly rate if available, otherwise keep current value
-        ...(zone.median_nightly_rate ? { nightly_rate: Math.round(zone.median_nightly_rate) } : {}),
-      }));
+      getAnalysis(params)
+        .then(setAnalysis)
+        .catch(() => setAnalysis(null));
+    } else {
+      setAnalysis(null);
     }
-  }, [zone]);
-
-  useEffect(() => {
-    getAnalysis(params)
-      .then(setAnalysis)
-      .catch(() => setAnalysis(null));
-  }, [params]);
+  }, [params, zone]);
 
   const update = (key, value) => {
-    setParams((p) => ({ ...p, [key]: parseFloat(value) || 0 }));
+    if (!zoneId) return;
+    setZoneOverrides((prev) => ({
+      ...prev,
+      [zoneId]: {
+        ...(prev[zoneId] || {}),
+        [key]: parseFloat(value) || 0,
+      }
+    }));
   };
 
   const renderSlider = ({ key, label, min, max, step }) => (

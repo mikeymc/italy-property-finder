@@ -3,13 +3,9 @@ import { getZones, startSampling, getSamplingStatus, stopSampling } from '../api
 import { ZoneFilters } from './ZoneFilters';
 import { ZoneMap } from './ZoneMap';
 
-export function grossYield(zone) {
-  if (!zone.rent_min || !zone.buy_min || zone.buy_min === 0) return null;
-  // Annualized rent / buy price (both per sqm)
-  return ((zone.rent_min * 12) / zone.buy_min) * 100;
-}
+import { calculateZoneMetrics } from '../utils/finance';
 
-export function ZoneExplorer({ onSelectZone }) {
+export function ZoneExplorer({ onSelectZone, zoneOverrides, defaultParams }) {
   const [filters, setFilters] = useState({});
   const [zones, setZones] = useState([]);
   const [sortKey, setSortKey] = useState('yield');
@@ -29,7 +25,7 @@ export function ZoneExplorer({ onSelectZone }) {
 
   // Poll sampling status when active
   useEffect(() => {
-    getSamplingStatus().then(setSamplingStatus).catch(() => {});
+    getSamplingStatus().then(setSamplingStatus).catch(() => { });
   }, []);
 
   useEffect(() => {
@@ -40,10 +36,10 @@ export function ZoneExplorer({ onSelectZone }) {
           setSamplingStatus(s);
           // Refresh zones when sampling completes to pick up new has_str_data flags
           if (!s.active) {
-            getZones(filters).then(setZones).catch(() => {});
+            getZones(filters).then(setZones).catch(() => { });
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     }, 3000);
     return () => clearInterval(interval);
   }, [samplingStatus?.active, filters]);
@@ -58,7 +54,7 @@ export function ZoneExplorer({ onSelectZone }) {
   }, [filters.province, filters.region]);
 
   const handleStopSampling = useCallback(() => {
-    stopSampling().then(() => setSamplingStatus((s) => ({ ...s, active: false }))).catch(() => {});
+    stopSampling().then(() => setSamplingStatus((s) => ({ ...s, active: false }))).catch(() => { });
   }, []);
 
   const handleSort = (key) => {
@@ -71,8 +67,18 @@ export function ZoneExplorer({ onSelectZone }) {
   };
 
   const sorted = [...zones].sort((a, b) => {
-    let aVal = sortKey === 'yield' ? grossYield(a) : a[sortKey];
-    let bVal = sortKey === 'yield' ? grossYield(b) : b[sortKey];
+    let aVal, bVal;
+    if (sortKey === 'yield') {
+      const aId = `${a.comune_name.toUpperCase()} - Zona OMI ${a.zona}`;
+      const bId = `${b.comune_name.toUpperCase()} - Zona OMI ${b.zona}`;
+      const aMetrics = calculateZoneMetrics(a, defaultParams, zoneOverrides[aId]);
+      const bMetrics = calculateZoneMetrics(b, defaultParams, zoneOverrides[bId]);
+      aVal = aMetrics ? aMetrics.gross_yield : -Infinity;
+      bVal = bMetrics ? bMetrics.gross_yield : -Infinity;
+    } else {
+      aVal = a[sortKey];
+      bVal = b[sortKey];
+    }
     aVal = aVal ?? -Infinity;
     bVal = bVal ?? -Infinity;
     return sortAsc ? aVal - bVal : bVal - aVal;
@@ -135,7 +141,7 @@ export function ZoneExplorer({ onSelectZone }) {
 
           {viewMode === 'map' ? (
             <div style={{ flex: 1, position: 'relative', minHeight: '600px' }}>
-              <ZoneMap zonesForLookup={zones} onSelectZone={onSelectZone} />
+              <ZoneMap zonesForLookup={zones} onSelectZone={onSelectZone} zoneOverrides={zoneOverrides} defaultParams={defaultParams} />
             </div>
           ) : (
             <div className="table-wrap" style={{ flex: 1, overflowY: 'auto' }}>
@@ -155,7 +161,9 @@ export function ZoneExplorer({ onSelectZone }) {
                 </thead>
                 <tbody>
                   {sorted.map((z, i) => {
-                    const yld = grossYield(z);
+                    const zId = `${z.comune_name.toUpperCase()} - Zona OMI ${z.zona}`;
+                    const metrics = calculateZoneMetrics(z, defaultParams, zoneOverrides[zId]);
+                    const yld = metrics ? metrics.gross_yield : undefined;
                     return (
                       <tr
                         key={i}
@@ -170,8 +178,8 @@ export function ZoneExplorer({ onSelectZone }) {
                         <td>€{z.buy_max?.toFixed(0)}</td>
                         <td>€{z.rent_min?.toFixed(2)}</td>
                         <td>€{z.rent_max?.toFixed(2)}</td>
-                        <td className={yld > 5 ? 'yield-good' : ''}>
-                          {yld ? yld.toFixed(1) + '%' : '—'}
+                        <td className={yld !== undefined && yld > 0 ? 'yield-good' : ''}>
+                          {yld !== undefined ? yld.toFixed(1) + '%' : '—'}
                         </td>
                       </tr>
                     );

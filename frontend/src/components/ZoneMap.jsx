@@ -1,11 +1,11 @@
 import { useState, useMemo } from 'react';
 import MapGL, { Source, Layer, NavigationControl } from 'react-map-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { grossYield } from './ZoneExplorer';
+import { calculateZoneMetrics } from '../utils/finance';
 
 const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
-export function ZoneMap({ zonesForLookup, onSelectZone }) {
+export function ZoneMap({ zonesForLookup, onSelectZone, zoneOverrides, defaultParams }) {
     const [hoverInfo, setHoverInfo] = useState(null);
 
     // We are loading the big generated JSON.
@@ -16,7 +16,7 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
     const { zoneLookup, fillColorExpression, strSampledNames } = useMemo(() => {
         const map = new Map();
 
-        if (!zonesForLookup || zonesForLookup.length === 0) {
+        if (!zonesForLookup || zonesForLookup.length === 0 || !defaultParams) {
             return { zoneLookup: map, fillColorExpression: '#088', strSampledNames: new Set() };
         }
 
@@ -27,7 +27,8 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
             // Avoid duplicate branch labels in the Mapbox match expression
             if (!map.has(uniqueId)) {
                 map.set(uniqueId, z);
-                const yld = grossYield(z);
+                const metrics = calculateZoneMetrics(z, defaultParams, zoneOverrides[uniqueId]);
+                const yld = metrics ? metrics.gross_yield : null;
                 if (yld !== null) {
                     validYields.push({ uniqueId, yld });
                 }
@@ -37,9 +38,6 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
         if (validYields.length === 0) {
             return { zoneLookup: map, fillColorExpression: '#088', strSampledNames: new Set() };
         }
-
-        // Sort ascending to easily compute rank/percentiles
-        validYields.sort((a, b) => a.yld - b.yld);
 
         const colors = [
             '#d73027', // deep red
@@ -52,12 +50,18 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
         ];
 
         const matchExpr = ['match', ['get', 'name']];
-        const n = validYields.length;
 
-        // Assign colors based on percentile rank so we get an even distribution
-        validYields.forEach((z, idx) => {
-            let pct = idx / Math.max(1, n - 1);
-            let colorIdx = Math.floor(pct * 6.99); // map to 0-6
+        // Assign colors based on fixed yield ranges
+        validYields.forEach((z) => {
+            let colorIdx = 0;
+            if (z.yld < 10) colorIdx = 0;
+            else if (z.yld < 20) colorIdx = 1;
+            else if (z.yld < 30) colorIdx = 2;
+            else if (z.yld < 45) colorIdx = 3;
+            else if (z.yld < 60) colorIdx = 4;
+            else if (z.yld < 80) colorIdx = 5;
+            else colorIdx = 6;
+
             matchExpr.push(z.uniqueId, colors[colorIdx]);
         });
 
@@ -76,7 +80,7 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
         );
 
         return { zoneLookup: map, fillColorExpression: matchExpr, strSampledNames };
-    }, [zonesForLookup]);
+    }, [zonesForLookup, zoneOverrides, defaultParams]);
 
     const fillLayerStyle = {
         id: 'zones-fill',
@@ -145,7 +149,8 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
                         if (feature) {
                             const uniqueName = feature.properties.name;
                             const matchedZone = zoneLookup.get(uniqueName);
-                            const yld = matchedZone ? grossYield(matchedZone) : null;
+                            const metrics = matchedZone ? calculateZoneMetrics(matchedZone, defaultParams, zoneOverrides[uniqueName]) : null;
+                            const yld = metrics ? metrics.gross_yield : null;
 
                             setHoverInfo({
                                 x: e.point.x,
@@ -189,8 +194,8 @@ export function ZoneMap({ zonesForLookup, onSelectZone }) {
                             <div style={{ fontWeight: 'bold', borderBottom: '1px solid #ddd', paddingBottom: '4px', marginBottom: '4px' }}>
                                 Zone: {hoverInfo.zone}
                             </div>
-                            <div style={{ color: hoverInfo.yield ? '#1a9850' : '#888', fontWeight: hoverInfo.yield ? 'bold' : 'normal' }}>
-                                {hoverInfo.yield !== null ? `Yield: ${hoverInfo.yield.toFixed(1)}%` : 'Yield: N/A'}
+                            <div style={{ color: hoverInfo.yield !== null && hoverInfo.yield > 0 ? '#1a9850' : '#888', fontWeight: hoverInfo.yield !== null && hoverInfo.yield > 0 ? 'bold' : 'normal' }}>
+                                {hoverInfo.yield !== null && hoverInfo.yield !== undefined ? `Yield: ${hoverInfo.yield.toFixed(1)}%` : 'Yield: N/A'}
                             </div>
                             {hoverInfo.hasStrData && hoverInfo.medianRate && (
                                 <div style={{ color: '#0066ff', fontSize: '12px', marginTop: '2px' }}>

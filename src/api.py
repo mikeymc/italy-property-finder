@@ -29,9 +29,13 @@ from src.zone_sampler import (
     sample_zone,
 )
 
+import typing
+
 # State for the background zone sampling job
 _sampling_active = False
-_sampling_job_id: str | None = None
+_sampling_job_id: typing.Optional[str] = None
+_sampled_in_job = 0
+_total_in_job = 0
 
 
 def create_app(db_path: str) -> Flask:
@@ -242,7 +246,7 @@ def create_app(db_path: str) -> Flask:
 
     @app.route("/api/sample/start", methods=["POST"])
     def sample_start():
-        global _sampling_active, _sampling_job_id
+        global _sampling_active, _sampling_job_id, _sampled_in_job, _total_in_job
 
         data = request.get_json() or {}
         province = data.get("province")
@@ -264,14 +268,17 @@ def create_app(db_path: str) -> Flask:
         job_id = uuid.uuid4().hex[:12]
         _sampling_job_id = job_id
         _sampling_active = True
+        _sampled_in_job = 0
+        _total_in_job = len(zones)
 
         def run_sampling():
-            global _sampling_active
+            global _sampling_active, _sampled_in_job
             for zone in zones:
                 if not _sampling_active:
                     break
                 sample_zone(db_path, zone)
                 update_zone_str_metrics(db_path, zone["link_zona"])
+                _sampled_in_job += 1
             _sampling_active = False
 
         thread = threading.Thread(target=run_sampling, daemon=True)
@@ -295,6 +302,17 @@ def create_app(db_path: str) -> Flask:
         except Exception:
             total = conn.execute("SELECT COUNT(*) FROM omi_zones").fetchone()[0]
         conn.close()
+
+        if _sampling_active:
+            return jsonify(
+                {
+                    "active": _sampling_active,
+                    "job_id": _sampling_job_id,
+                    "sampled": _sampled_in_job,
+                    "total": _total_in_job,
+                }
+            )
+
         return jsonify(
             {
                 "active": _sampling_active,
