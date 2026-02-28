@@ -9,8 +9,14 @@ class AcquisitionCosts:
     """One-time costs at purchase."""
 
     registro_pct: float  # Imposta di registro (9% second home, 2% first home)
-    notary_fee: float  # Notary flat fee
+    notary_purchase_fee: float  # Notary fee for deed of sale
+    notary_mutuo_fee: float  # Notary fee for mortgage deed
     agency_fee_pct: float  # Real estate agent fee as % of purchase price
+    mutuo_tax_pct: float  # Imposta sostitutiva (0.25% or 2%) applied to mutuo
+    bank_origination_fee: float  # Istruttoria bank fee
+    appraisal_fee: float  # Perizia bank fee
+    technical_report_fee: float  # Geometra relazion tecnica
+    cadastral_and_mortgage_taxes: float  # Fixed taxes
 
 
 @dataclass
@@ -22,7 +28,11 @@ class AnnualCosts:
     maintenance_pct: float  # Annual maintenance as % of purchase price
     insurance: float  # Annual insurance
     condo_fees_monthly: float  # Monthly condominium fees
-    utilities_monthly: float  # Monthly utilities when property is vacant
+    electricity_monthly: float  # Monthly electricity
+    gas_monthly: float  # Monthly gas
+    water_monthly: float  # Monthly water
+    internet_monthly: float  # Monthly internet
+    accountant_fee_annual: float  # Commercialista fee
 
 
 @dataclass
@@ -76,7 +86,16 @@ class PropertyInvestment:
     def total_acquisition_cost(self) -> float:
         registro = self.purchase_price * self.acquisition.registro_pct
         agency = self.purchase_price * self.acquisition.agency_fee_pct
-        return registro + self.acquisition.notary_fee + agency
+        mutuo_tax = self.mutuo_amount * self.acquisition.mutuo_tax_pct
+        fees = (
+            self.acquisition.notary_purchase_fee
+            + self.acquisition.notary_mutuo_fee
+            + self.acquisition.bank_origination_fee
+            + self.acquisition.appraisal_fee
+            + self.acquisition.technical_report_fee
+            + self.acquisition.cadastral_and_mortgage_taxes
+        )
+        return registro + agency + mutuo_tax + fees
 
     @property
     def total_cash_outlay(self) -> float:
@@ -112,11 +131,16 @@ class PropertyInvestment:
             + self.annual_costs.tari
             + self.purchase_price * self.annual_costs.maintenance_pct
             + self.annual_costs.insurance
+            + self.annual_costs.accountant_fee_annual
             + self.annual_costs.condo_fees_monthly * 12
         )
-        # Utilities only incurred during vacant periods
-        vacancy_rate = 1 - self.rental_income.occupancy_rate
-        utilities = self.annual_costs.utilities_monthly * 12 * vacancy_rate
+        # STR hosts typically pay utilities directly regardless of vacancy
+        utilities = (
+            self.annual_costs.electricity_monthly
+            + self.annual_costs.gas_monthly
+            + self.annual_costs.water_monthly
+            + self.annual_costs.internet_monthly
+        ) * 12
         return fixed + utilities
 
     @property
@@ -184,9 +208,15 @@ class PropertyInvestment:
             + self.annual_costs.tari
             + self.purchase_price * self.annual_costs.maintenance_pct
             + self.annual_costs.insurance
+            + self.annual_costs.accountant_fee_annual
             + self.annual_costs.condo_fees_monthly * 12
         )
-        utilities = self.annual_costs.utilities_monthly * 12 * (1 - occupancy)
+        utilities = (
+            self.annual_costs.electricity_monthly
+            + self.annual_costs.gas_monthly
+            + self.annual_costs.water_monthly
+            + self.annual_costs.internet_monthly
+        ) * 12
         expenses = fixed_expenses + utilities
 
         tax = net_rental * self.cedolare_secca_rate

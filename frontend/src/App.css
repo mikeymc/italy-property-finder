@@ -143,6 +143,38 @@ tbody td {
   font-variant-numeric: tabular-nums;
 }
 
+.sliders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.sliders-section h3 {
+  font-size: 0.95rem;
+  color: #333;
+  margin: 0;
+}
+
+.section-header-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.header-summary {
+  font-size: 0.8rem;
+  color: #666;
+  font-weight: normal;
+}
+
+.sliders-section .sliders {
+  margin-bottom: 0;
+}
+
 /* Financial Summary */
 .financial-summary h3 {
   font-size: 0.95rem;
@@ -176,8 +208,13 @@ tbody td {
   font-weight: 600;
 }
 
-.positive { color: #0a7c42; }
-.negative { color: #c0392b; }
+.positive {
+  color: #0a7c42;
+}
+
+.negative {
+  color: #c0392b;
+}
 
 .monthly-table {
   width: 100%;
@@ -239,9 +276,20 @@ tbody td {
   cursor: not-allowed;
 }
 
-.error { color: #c0392b; font-size: 0.8rem; }
-.success { color: #0a7c42; font-size: 0.8rem; }
-.loading { color: #666; font-size: 0.85rem; }
+.error {
+  color: #c0392b;
+  font-size: 0.8rem;
+}
+
+.success {
+  color: #0a7c42;
+  font-size: 0.8rem;
+}
+
+.loading {
+  color: #666;
+  font-size: 0.85rem;
+}
 
 .listing-cards {
   display: flex;

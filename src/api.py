@@ -72,7 +72,9 @@ def create_app(db_path: str) -> Flask:
         for zone in results:
             metrics = str_metrics.get(zone.get("link_zona"))
             zone["has_str_data"] = metrics is not None
-            zone["median_nightly_rate"] = metrics["median_nightly_rate"] if metrics else None
+            zone["median_nightly_rate"] = (
+                metrics["median_nightly_rate"] if metrics else None
+            )
             zone["str_listing_count"] = metrics["listing_count"] if metrics else None
 
         return jsonify(results)
@@ -96,7 +98,14 @@ def create_app(db_path: str) -> Flask:
             nightly_rate = float(request.args["nightly_rate"])
             occupancy_rate = float(request.args["occupancy_rate"])
         except (KeyError, ValueError):
-            return jsonify({"error": "Required: purchase_price, square_meters, nightly_rate, occupancy_rate"}), 400
+            return (
+                jsonify(
+                    {
+                        "error": "Required: purchase_price, square_meters, nightly_rate, occupancy_rate"
+                    }
+                ),
+                400,
+            )
 
         # Optional params with defaults
         down_payment_pct = float(request.args.get("down_payment_pct", 0.20))
@@ -108,6 +117,31 @@ def create_app(db_path: str) -> Flask:
         avg_stay_nights = int(request.args.get("avg_stay_nights", 4))
         cedolare_secca_rate = float(request.args.get("cedolare_secca_rate", 0.21))
 
+        # New acquisition parameters
+        registro_pct = float(request.args.get("registro_pct", 0.09))
+        notary_purchase_fee = float(request.args.get("notary_purchase_fee", 2500.0))
+        notary_mutuo_fee = float(request.args.get("notary_mutuo_fee", 1500.0))
+        agency_fee_pct = float(request.args.get("agency_fee_pct", 0.03))
+        mutuo_tax_pct = float(request.args.get("mutuo_tax_pct", 0.02))
+        bank_origination_fee = float(request.args.get("bank_origination_fee", 500.0))
+        appraisal_fee = float(request.args.get("appraisal_fee", 300.0))
+        technical_report_fee = float(request.args.get("technical_report_fee", 500.0))
+        cadastral_and_mortgage_taxes = float(
+            request.args.get("cadastral_and_mortgage_taxes", 100.0)
+        )
+
+        # New annual parameters
+        imu = float(request.args.get("imu", 1200.0))
+        tari = float(request.args.get("tari", 300.0))
+        maintenance_pct = float(request.args.get("maintenance_pct", 0.01))
+        insurance = float(request.args.get("insurance", 400.0))
+        condo_fees_monthly = float(request.args.get("condo_fees_monthly", 50.0))
+        electricity_monthly = float(request.args.get("electricity_monthly", 60.0))
+        gas_monthly = float(request.args.get("gas_monthly", 50.0))
+        water_monthly = float(request.args.get("water_monthly", 20.0))
+        internet_monthly = float(request.args.get("internet_monthly", 30.0))
+        accountant_fee_annual = float(request.args.get("accountant_fee_annual", 400.0))
+
         invest = PropertyInvestment(
             purchase_price=purchase_price,
             square_meters=square_meters,
@@ -115,17 +149,27 @@ def create_app(db_path: str) -> Flask:
             mutuo_rate_annual=mutuo_rate,
             mutuo_term_years=mutuo_term,
             acquisition=AcquisitionCosts(
-                registro_pct=0.09,
-                notary_fee=2500.0,
-                agency_fee_pct=0.03,
+                registro_pct=registro_pct,
+                notary_purchase_fee=notary_purchase_fee,
+                notary_mutuo_fee=notary_mutuo_fee,
+                agency_fee_pct=agency_fee_pct,
+                mutuo_tax_pct=mutuo_tax_pct,
+                bank_origination_fee=bank_origination_fee,
+                appraisal_fee=appraisal_fee,
+                technical_report_fee=technical_report_fee,
+                cadastral_and_mortgage_taxes=cadastral_and_mortgage_taxes,
             ),
             annual_costs=AnnualCosts(
-                imu=1200.0,
-                tari=300.0,
-                maintenance_pct=0.01,
-                insurance=400.0,
-                condo_fees_monthly=50.0,
-                utilities_monthly=150.0,
+                imu=imu,
+                tari=tari,
+                maintenance_pct=maintenance_pct,
+                insurance=insurance,
+                condo_fees_monthly=condo_fees_monthly,
+                electricity_monthly=electricity_monthly,
+                gas_monthly=gas_monthly,
+                water_monthly=water_monthly,
+                internet_monthly=internet_monthly,
+                accountant_fee_annual=accountant_fee_annual,
             ),
             rental_income=RentalIncome(
                 nightly_rate=nightly_rate,
@@ -138,19 +182,22 @@ def create_app(db_path: str) -> Flask:
             cedolare_secca_rate=cedolare_secca_rate,
         )
 
-        return jsonify({
-            "purchase_price": invest.purchase_price,
-            "total_cash_outlay": invest.total_cash_outlay,
-            "gross_rental_income": invest.gross_rental_income_annual,
-            "net_rental_income": invest.net_rental_income_annual,
-            "annual_expenses": invest.annual_expenses,
-            "rental_income_tax": invest.rental_income_tax,
-            "annual_cash_flow": invest.annual_cash_flow,
-            "cap_rate": invest.cap_rate,
-            "cash_on_cash_return": invest.cash_on_cash_return,
-            "break_even_occupancy": invest.break_even_occupancy,
-            "monthly": invest.monthly_summary(),
-        })
+        return jsonify(
+            {
+                "purchase_price": invest.purchase_price,
+                "total_acquisition_cost": invest.total_acquisition_cost,
+                "total_cash_outlay": invest.total_cash_outlay,
+                "gross_rental_income": invest.gross_rental_income_annual,
+                "net_rental_income": invest.net_rental_income_annual,
+                "annual_expenses": invest.annual_expenses,
+                "rental_income_tax": invest.rental_income_tax,
+                "annual_cash_flow": invest.annual_cash_flow,
+                "cap_rate": invest.cap_rate,
+                "cash_on_cash_return": invest.cash_on_cash_return,
+                "break_even_occupancy": invest.break_even_occupancy,
+                "monthly": invest.monthly_summary(),
+            }
+        )
 
     @app.route("/api/scrape/airbnb", methods=["POST"])
     def start_scrape():
@@ -168,7 +215,9 @@ def create_app(db_path: str) -> Flask:
             try:
                 listings = search_area(query, checkin, checkout)
                 save_listings(db_path, query, listings)
-                update_job(db_path, job_id, status="completed", result_count=len(listings))
+                update_job(
+                    db_path, job_id, status="completed", result_count=len(listings)
+                )
             except Exception as e:
                 update_job(db_path, job_id, status="failed", error=str(e))
 
@@ -204,7 +253,13 @@ def create_app(db_path: str) -> Flask:
 
         zones = get_zones_to_sample(db_path, province=province, region=region)
         if not zones:
-            return jsonify({"job_id": None, "zones_queued": 0, "message": "No unsampled zones with bounding box found"})
+            return jsonify(
+                {
+                    "job_id": None,
+                    "zones_queued": 0,
+                    "message": "No unsampled zones with bounding box found",
+                }
+            )
 
         job_id = uuid.uuid4().hex[:12]
         _sampling_job_id = job_id
@@ -227,8 +282,11 @@ def create_app(db_path: str) -> Flask:
     @app.route("/api/sample/status")
     def sample_status():
         import sqlite3 as _sqlite3
+
         conn = _sqlite3.connect(db_path)
-        sampled = conn.execute("SELECT COUNT(*) FROM zone_sampling_status").fetchone()[0]
+        sampled = conn.execute("SELECT COUNT(*) FROM zone_sampling_status").fetchone()[
+            0
+        ]
         # Count zones with bounding boxes (column added by load_zone_bboxes; may not exist yet)
         try:
             total = conn.execute(
@@ -237,12 +295,14 @@ def create_app(db_path: str) -> Flask:
         except Exception:
             total = conn.execute("SELECT COUNT(*) FROM omi_zones").fetchone()[0]
         conn.close()
-        return jsonify({
-            "active": _sampling_active,
-            "job_id": _sampling_job_id,
-            "sampled": sampled,
-            "total": total,
-        })
+        return jsonify(
+            {
+                "active": _sampling_active,
+                "job_id": _sampling_job_id,
+                "sampled": sampled,
+                "total": total,
+            }
+        )
 
     @app.route("/api/sample/stop", methods=["POST"])
     def sample_stop():

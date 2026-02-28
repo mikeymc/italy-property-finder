@@ -1,7 +1,12 @@
 # ABOUTME: Tests for the core financial model that calculates investment returns
 # ABOUTME: for Italian rental properties including mutuo, taxes, and STR revenue.
 
-from src.financial_model import PropertyInvestment, AcquisitionCosts, AnnualCosts, RentalIncome
+from src.financial_model import (
+    PropertyInvestment,
+    AcquisitionCosts,
+    AnnualCosts,
+    RentalIncome,
+)
 
 
 class TestPropertyInvestment:
@@ -18,26 +23,36 @@ class TestPropertyInvestment:
             mutuo_term_years=25,
             # Acquisition costs
             acquisition=AcquisitionCosts(
-                registro_pct=0.09,      # 9% for second home
-                notary_fee=3_000,
+                registro_pct=0.09,  # 9% for second home
+                notary_purchase_fee=2_000,
+                notary_mutuo_fee=1_000,
                 agency_fee_pct=0.03,
+                mutuo_tax_pct=0.02,  # 2% on mutuo
+                bank_origination_fee=500,
+                appraisal_fee=300,
+                technical_report_fee=500,
+                cadastral_and_mortgage_taxes=100,
             ),
             # Annual recurring costs
             annual_costs=AnnualCosts(
-                imu=800,                # Based on cadastral value
-                tari=400,               # Waste tax
-                maintenance_pct=0.01,   # 1% of purchase price per year
+                imu=800,  # Based on cadastral value
+                tari=400,  # Waste tax
+                maintenance_pct=0.01,  # 1% of purchase price per year
                 insurance=300,
                 condo_fees_monthly=100,
-                utilities_monthly=150,  # When not rented (owner's share)
+                electricity_monthly=50,
+                gas_monthly=50,
+                water_monthly=20,
+                internet_monthly=30,
+                accountant_fee_annual=400,
             ),
             # Rental income
             rental_income=RentalIncome(
                 nightly_rate=90,
-                occupancy_rate=0.60,    # 60% occupancy
+                occupancy_rate=0.60,  # 60% occupancy
                 cleaning_fee=50,
                 management_fee_pct=0.20,  # 20% property manager cut
-                platform_fee_pct=0.03,    # Airbnb host fee ~3%
+                platform_fee_pct=0.03,  # Airbnb host fee ~3%
             ),
             # Tax on rental income
             cedolare_secca_rate=0.21,
@@ -64,15 +79,16 @@ class TestPropertyInvestment:
     def test_total_acquisition_cost(self):
         inv = self._sample_investment()
         # registro: 150k * 9% = 13,500
-        # notary: 3,000
         # agency: 150k * 3% = 4,500
-        # total: 21,000
-        assert inv.total_acquisition_cost == 13_500 + 3_000 + 4_500
+        # mutuo tax: 120k * 2% = 2,400
+        # fees = 2,000 + 1,000 + 500 + 300 + 500 + 100 = 4,400
+        # total = 24,800
+        assert inv.total_acquisition_cost == 13_500 + 4_500 + 2_400 + 4_400
 
     def test_total_cash_outlay(self):
         """Down payment + acquisition costs = total cash needed upfront."""
         inv = self._sample_investment()
-        expected = 30_000 + 21_000
+        expected = 30_000 + 24_800
         assert inv.total_cash_outlay == expected
 
     def test_gross_rental_income_annual(self):
@@ -86,9 +102,7 @@ class TestPropertyInvestment:
     def test_cleaning_fee_income_annual(self):
         inv = self._sample_investment()
         # Assume average stay of 4 nights -> ~54 turnovers
-        # But cleaning fees are pass-through, offset by cleaning costs
-        # For now: 219 nights / avg_stay * cleaning_fee
-        # We'll use a default avg_stay of 4 nights
+        # 219 nights / avg_stay * cleaning_fee
         turnovers = int(365 * 0.60) // 4
         expected = turnovers * 50
         assert inv.cleaning_fee_income_annual == expected
@@ -105,12 +119,9 @@ class TestPropertyInvestment:
 
     def test_annual_expenses(self):
         inv = self._sample_investment()
-        # IMU: 800, TARI: 400, maintenance: 1500, insurance: 300
-        # condo: 100*12=1200, utilities: 150*12=1800 (prorated by vacancy)
-        # Utilities only apply when NOT rented (~40% of year)
-        expected_fixed = 800 + 400 + 1_500 + 300 + 1_200
-        expected_utilities = 150 * 12 * (1 - 0.60)  # Only pay when vacant
-        expected = expected_fixed + expected_utilities
+        # fixed: IMU (800) + TARI (400) + maintenance (1500) + insurance (300) + accountant (400) + condo (1200) = 4600
+        # utilities: (50 + 50 + 20 + 30) * 12 = 1800
+        expected = 4600 + 1800
         assert abs(inv.annual_expenses - expected) < 1
 
     def test_rental_income_tax(self):
@@ -171,16 +182,33 @@ class TestCashPurchase:
             mutuo_term_years=25,
             acquisition=AcquisitionCosts(
                 registro_pct=0.09,
-                notary_fee=3_000,
+                notary_purchase_fee=2_000,
+                notary_mutuo_fee=0,  # No mutuo, no fee
                 agency_fee_pct=0.03,
+                mutuo_tax_pct=0.0,  # No mutuo tax
+                bank_origination_fee=0,  # No bank fees
+                appraisal_fee=0,  # No bank fees
+                technical_report_fee=500,
+                cadastral_and_mortgage_taxes=100,
             ),
             annual_costs=AnnualCosts(
-                imu=800, tari=400, maintenance_pct=0.01,
-                insurance=300, condo_fees_monthly=100, utilities_monthly=150,
+                imu=800,
+                tari=400,
+                maintenance_pct=0.01,
+                insurance=300,
+                condo_fees_monthly=100,
+                electricity_monthly=50,
+                gas_monthly=50,
+                water_monthly=20,
+                internet_monthly=30,
+                accountant_fee_annual=400,
             ),
             rental_income=RentalIncome(
-                nightly_rate=90, occupancy_rate=0.60,
-                cleaning_fee=50, management_fee_pct=0.20, platform_fee_pct=0.03,
+                nightly_rate=90,
+                occupancy_rate=0.60,
+                cleaning_fee=50,
+                management_fee_pct=0.20,
+                platform_fee_pct=0.03,
             ),
             cedolare_secca_rate=0.21,
         )
@@ -192,16 +220,22 @@ class TestCashPurchase:
 
     def test_total_cash_outlay_is_full_price_plus_acquisition(self):
         inv = self._cash_investment()
-        assert inv.total_cash_outlay == 150_000 + 21_000
+        # registro: 13,500, agency: 4,500, fees: 2600. Total acq: 20,600
+        assert inv.total_cash_outlay == 150_000 + 20_600
 
     def test_cash_flow_higher_without_mutuo(self):
         """No mortgage means all NOI flows to the owner."""
         cash = self._cash_investment()
         financed = PropertyInvestment(
-            purchase_price=150_000, square_meters=70,
-            down_payment_pct=0.20, mutuo_rate_annual=0.035, mutuo_term_years=25,
-            acquisition=cash.acquisition, annual_costs=cash.annual_costs,
-            rental_income=cash.rental_income, cedolare_secca_rate=0.21,
+            purchase_price=150_000,
+            square_meters=70,
+            down_payment_pct=0.20,
+            mutuo_rate_annual=0.035,
+            mutuo_term_years=25,
+            acquisition=cash.acquisition,
+            annual_costs=cash.annual_costs,
+            rental_income=cash.rental_income,
+            cedolare_secca_rate=0.21,
         )
         assert cash.annual_cash_flow > financed.annual_cash_flow
 
@@ -219,10 +253,15 @@ class TestCashPurchase:
     def test_break_even_lower_without_mutuo(self):
         cash = self._cash_investment()
         financed = PropertyInvestment(
-            purchase_price=150_000, square_meters=70,
-            down_payment_pct=0.20, mutuo_rate_annual=0.035, mutuo_term_years=25,
-            acquisition=cash.acquisition, annual_costs=cash.annual_costs,
-            rental_income=cash.rental_income, cedolare_secca_rate=0.21,
+            purchase_price=150_000,
+            square_meters=70,
+            down_payment_pct=0.20,
+            mutuo_rate_annual=0.035,
+            mutuo_term_years=25,
+            acquisition=cash.acquisition,
+            annual_costs=cash.annual_costs,
+            rental_income=cash.rental_income,
+            cedolare_secca_rate=0.21,
         )
         assert cash.break_even_occupancy < financed.break_even_occupancy
 
@@ -235,19 +274,38 @@ class TestReturnTargets:
         inv = PropertyInvestment(
             purchase_price=80_000,
             square_meters=50,
-            down_payment_pct=1.0,
+            down_payment_pct=1.0,  # Cash purchase
             mutuo_rate_annual=0.0,
             mutuo_term_years=25,
             acquisition=AcquisitionCosts(
-                registro_pct=0.09, notary_fee=2_500, agency_fee_pct=0.03,
+                registro_pct=0.09,
+                notary_purchase_fee=2_000,
+                notary_mutuo_fee=0,
+                agency_fee_pct=0.03,
+                mutuo_tax_pct=0.0,
+                bank_origination_fee=0,
+                appraisal_fee=0,
+                technical_report_fee=500,
+                cadastral_and_mortgage_taxes=100,
             ),
             annual_costs=AnnualCosts(
-                imu=500, tari=300, maintenance_pct=0.01,
-                insurance=200, condo_fees_monthly=60, utilities_monthly=100,
+                imu=500,
+                tari=300,
+                maintenance_pct=0.01,
+                insurance=200,
+                condo_fees_monthly=60,
+                electricity_monthly=40,
+                gas_monthly=40,
+                water_monthly=15,
+                internet_monthly=30,
+                accountant_fee_annual=400,
             ),
             rental_income=RentalIncome(
-                nightly_rate=80, occupancy_rate=0.65,
-                cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+                nightly_rate=80,
+                occupancy_rate=0.65,
+                cleaning_fee=40,
+                management_fee_pct=0.20,
+                platform_fee_pct=0.03,
             ),
             cedolare_secca_rate=0.21,
         )
@@ -263,15 +321,34 @@ class TestReturnTargets:
             mutuo_rate_annual=0.0,
             mutuo_term_years=25,
             acquisition=AcquisitionCosts(
-                registro_pct=0.09, notary_fee=2_500, agency_fee_pct=0.03,
+                registro_pct=0.09,
+                notary_purchase_fee=2_000,
+                notary_mutuo_fee=0,
+                agency_fee_pct=0.03,
+                mutuo_tax_pct=0.0,
+                bank_origination_fee=0,
+                appraisal_fee=0,
+                technical_report_fee=500,
+                cadastral_and_mortgage_taxes=100,
             ),
             annual_costs=AnnualCosts(
-                imu=600, tari=350, maintenance_pct=0.01,
-                insurance=250, condo_fees_monthly=80, utilities_monthly=120,
+                imu=600,
+                tari=350,
+                maintenance_pct=0.01,
+                insurance=250,
+                condo_fees_monthly=80,
+                electricity_monthly=45,
+                gas_monthly=45,
+                water_monthly=20,
+                internet_monthly=30,
+                accountant_fee_annual=400,
             ),
             rental_income=RentalIncome(
-                nightly_rate=0, occupancy_rate=0.60,
-                cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+                nightly_rate=0,
+                occupancy_rate=0.60,
+                cleaning_fee=40,
+                management_fee_pct=0.20,
+                platform_fee_pct=0.03,
             ),
             cedolare_secca_rate=0.21,
         )
@@ -279,9 +356,13 @@ class TestReturnTargets:
         assert rate > 0
         # Verify: if we plug this rate back in, we should get ~10% return
         from dataclasses import replace
+
         new_rental = RentalIncome(
-            nightly_rate=rate, occupancy_rate=0.60,
-            cleaning_fee=40, management_fee_pct=0.20, platform_fee_pct=0.03,
+            nightly_rate=rate,
+            occupancy_rate=0.60,
+            cleaning_fee=40,
+            management_fee_pct=0.20,
+            platform_fee_pct=0.03,
         )
         check = replace(inv, rental_income=new_rental)
         assert abs(check.cash_on_cash_return - 0.10) < 0.005
