@@ -169,6 +169,7 @@ def search_listings(
     params = {
         "tab_id": "home_tab",
         "refinement_paths[]": "/homes",
+        "room_types[]": "Entire home/apt",
         "query": query,
         "checkin": checkin,
         "checkout": checkout,
@@ -222,6 +223,7 @@ def build_bounds_params(
     params = {
         "tab_id": "home_tab",
         "refinement_paths[]": "/homes",
+        "room_types[]": "Entire home/apt",
         "checkin": checkin,
         "checkout": checkout,
         "adults": adults,

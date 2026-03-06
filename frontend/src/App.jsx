@@ -42,6 +42,11 @@ export const defaultParams = {
 function App() {
   const [selectedZone, setSelectedZone] = useState(null);
   const [zoneOverrides, setZoneOverrides] = useState({});
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleScrapeComplete = () => {
+    setRefreshTrigger(prev => prev + 1);
+  };
 
   return (
     <div className="app">
@@ -54,6 +59,7 @@ function App() {
             onSelectZone={setSelectedZone}
             zoneOverrides={zoneOverrides}
             defaultParams={defaultParams}
+            refreshTrigger={refreshTrigger}
           />
         </div>
         <div className="panel panel-right">
@@ -62,6 +68,7 @@ function App() {
             zoneOverrides={zoneOverrides}
             setZoneOverrides={setZoneOverrides}
             defaultParams={defaultParams}
+            onScrapeComplete={handleScrapeComplete}
           />
         </div>
       </main>

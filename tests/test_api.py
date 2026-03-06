@@ -19,39 +19,142 @@ def db_path(tmp_path):
 
     # Create OMI tables with sample data
     conn = sqlite3.connect(path)
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE omi_values (
             area TEXT, region TEXT, province TEXT, comune_istat TEXT,
             comune_name TEXT, fascia TEXT, zona TEXT, link_zona TEXT,
             property_type_code TEXT, property_type TEXT, condition TEXT,
             buy_min REAL, buy_max REAL, rent_min REAL, rent_max REAL
         )
-    """)
-    conn.execute("""
+    """
+    )
+    conn.execute(
+        """
         CREATE TABLE omi_zones (
             area TEXT, region TEXT, province TEXT, comune_istat TEXT,
             comune_name TEXT, fascia TEXT, zona TEXT, zona_desc TEXT,
-            link_zona TEXT, prevalent_type TEXT, microzona INTEGER
+            link_zona TEXT, prevalent_type TEXT, microzona INTEGER,
+            ne_lat REAL, ne_lng REAL, sw_lat REAL, sw_lng REAL
         )
-    """)
+    """
+    )
     conn.executemany(
         "INSERT INTO omi_values VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
-            ("SUD", "PUGLIA", "BA", "001", "Bari", "C", "B1", "link1", "20", "Abitazioni civili", "NORMALE", 800, 1200, 3.0, 5.0),
-            ("SUD", "PUGLIA", "LE", "002", "Lecce", "C", "B2", "link2", "20", "Abitazioni civili", "NORMALE", 600, 900, 2.5, 4.0),
-            ("SUD", "SICILIA", "PA", "003", "Palermo", "C", "B3", "link3", "20", "Abitazioni civili", "NORMALE", 500, 800, 2.0, 3.5),
+            (
+                "SUD",
+                "PUGLIA",
+                "BA",
+                "001",
+                "Bari",
+                "C",
+                "B1",
+                "link1",
+                "20",
+                "Abitazioni civili",
+                "NORMALE",
+                800,
+                1200,
+                3.0,
+                5.0,
+            ),
+            (
+                "SUD",
+                "PUGLIA",
+                "LE",
+                "002",
+                "Lecce",
+                "C",
+                "B2",
+                "link2",
+                "20",
+                "Abitazioni civili",
+                "NORMALE",
+                600,
+                900,
+                2.5,
+                4.0,
+            ),
+            (
+                "SUD",
+                "SICILIA",
+                "PA",
+                "003",
+                "Palermo",
+                "C",
+                "B3",
+                "link3",
+                "20",
+                "Abitazioni civili",
+                "NORMALE",
+                500,
+                800,
+                2.0,
+                3.5,
+            ),
         ],
     )
     conn.executemany(
-        "INSERT INTO omi_zones VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO omi_zones VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         [
-            ("SUD", "PUGLIA", "BA", "001", "Bari", "C", "B1", "Centro storico", "link1", "civili", 1),
-            ("SUD", "PUGLIA", "LE", "002", "Lecce", "C", "B2", "Periferia", "link2", "civili", 1),
-            ("SUD", "SICILIA", "PA", "003", "Palermo", "C", "B3", "Centro", "link3", "civili", 1),
+            (
+                "SUD",
+                "PUGLIA",
+                "BA",
+                "001",
+                "Bari",
+                "C",
+                "B1",
+                "Centro storico",
+                "link1",
+                "civili",
+                1,
+                41.1,
+                16.8,
+                41.0,
+                16.7,
+            ),
+            (
+                "SUD",
+                "PUGLIA",
+                "LE",
+                "002",
+                "Lecce",
+                "C",
+                "B2",
+                "Periferia",
+                "link2",
+                "civili",
+                1,
+                40.3,
+                18.1,
+                40.2,
+                18.0,
+            ),
+            (
+                "SUD",
+                "SICILIA",
+                "PA",
+                "003",
+                "Palermo",
+                "C",
+                "B3",
+                "Centro",
+                "link3",
+                "civili",
+                1,
+                38.2,
+                13.4,
+                38.1,
+                13.3,
+            ),
         ],
     )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_values_region ON omi_values(region)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_values_province ON omi_values(province)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_values_province ON omi_values(province)"
+    )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_zones_link ON omi_zones(link_zona)")
     conn.commit()
     conn.close()
@@ -121,7 +224,9 @@ class TestProvincesEndpoint:
 
 class TestAnalysisEndpoint:
     def test_basic_analysis(self, client):
-        resp = client.get("/api/analysis?purchase_price=100000&square_meters=50&nightly_rate=80&occupancy_rate=0.6")
+        resp = client.get(
+            "/api/analysis?purchase_price=100000&square_meters=50&nightly_rate=80&occupancy_rate=0.6"
+        )
         assert resp.status_code == 200
         data = resp.get_json()
         assert "annual_cash_flow" in data
@@ -139,7 +244,7 @@ class TestScrapeEndpoints:
     def test_start_scrape_job(self, client):
         resp = client.post(
             "/api/scrape/airbnb",
-            json={"query": "Rome, Italy", "checkin": "2025-06-01", "checkout": "2025-06-06"},
+            json={"query": "link1", "checkin": "2025-06-01", "checkout": "2025-06-06"},
         )
         assert resp.status_code == 200
         data = resp.get_json()
@@ -149,7 +254,7 @@ class TestScrapeEndpoints:
         # Create a job first
         resp = client.post(
             "/api/scrape/airbnb",
-            json={"query": "Rome", "checkin": "2025-06-01", "checkout": "2025-06-06"},
+            json={"query": "link1", "checkin": "2025-06-01", "checkout": "2025-06-06"},
         )
         job_id = resp.get_json()["job_id"]
 
@@ -163,13 +268,13 @@ class TestScrapeEndpoints:
         assert resp.status_code == 404
 
     def test_start_scrape_missing_params(self, client):
-        resp = client.post("/api/scrape/airbnb", json={"query": "Rome"})
+        resp = client.post("/api/scrape/airbnb", json={"query": "link1"})
         assert resp.status_code == 400
 
 
 class TestAirbnbListingsEndpoint:
     def test_get_empty_listings(self, client):
-        resp = client.get("/api/airbnb-listings?query=Rome")
+        resp = client.get("/api/airbnb-listings?query=link1")
         assert resp.status_code == 200
         assert resp.get_json() == []
 
@@ -188,6 +293,7 @@ class TestZonesStrDataFlag:
     def test_zones_has_str_data_true_when_metrics_exist(self, client, db_path):
         conn = sqlite3.connect(db_path)
         from datetime import datetime, timezone
+
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             "INSERT INTO zone_str_metrics (link_zona, median_nightly_rate, listing_count, computed_at) VALUES (?, ?, ?, ?)",
@@ -208,20 +314,6 @@ class TestSamplingEndpoints:
         assert resp.status_code == 400
 
     def test_sample_start_accepts_province(self, client, db_path):
-        # Add a zone with bbox so there's something to sample
-        conn = sqlite3.connect(db_path)
-        conn.execute(
-            "ALTER TABLE omi_zones ADD COLUMN ne_lat REAL"
-        )
-        conn.execute("ALTER TABLE omi_zones ADD COLUMN ne_lng REAL")
-        conn.execute("ALTER TABLE omi_zones ADD COLUMN sw_lat REAL")
-        conn.execute("ALTER TABLE omi_zones ADD COLUMN sw_lng REAL")
-        conn.execute(
-            "UPDATE omi_zones SET ne_lat=40.9, ne_lng=14.3, sw_lat=40.7, sw_lng=14.1 WHERE link_zona='link1'"
-        )
-        conn.commit()
-        conn.close()
-
         resp = client.post("/api/sample/start", json={"province": "BA"})
         assert resp.status_code == 200
         data = resp.get_json()

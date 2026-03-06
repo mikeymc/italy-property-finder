@@ -5,14 +5,19 @@ import sqlite3
 import pytest
 from datetime import datetime, timezone
 
-from src.str_metrics import compute_zone_metrics, update_zone_str_metrics, init_str_metrics_table
+from src.str_metrics import (
+    compute_zone_metrics,
+    update_zone_str_metrics,
+    init_str_metrics_table,
+)
 
 
 def make_db_with_listings(tmp_path, listings_data):
     """Create a test DB with airbnb_listings pre-populated."""
     db_path = str(tmp_path / "test.db")
     conn = sqlite3.connect(db_path)
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE airbnb_listings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             query TEXT,
@@ -25,12 +30,13 @@ def make_db_with_listings(tmp_path, listings_data):
             is_guest_favorite INTEGER,
             scraped_at TEXT NOT NULL
         )
-    """)
+    """
+    )
     now = datetime.now(timezone.utc).isoformat()
     for row in listings_data:
         conn.execute(
-            "INSERT INTO airbnb_listings (link_zona, listing_id, nightly_rate, bedrooms, rating, scraped_at) VALUES (?,?,?,?,?,?)",
-            (*row, now),
+            "INSERT INTO airbnb_listings (link_zona, listing_id, nightly_rate, bedrooms, rating, review_count, scraped_at) VALUES (?,?,?,?,?,?,?)",
+            (*row, 10, now),
         )
     conn.commit()
     conn.close()
@@ -40,43 +46,51 @@ def make_db_with_listings(tmp_path, listings_data):
 class TestComputeZoneMetrics:
     def test_median_nightly_rate_odd_count(self):
         rates = [100.0, 120.0, 80.0, 150.0, 90.0]
-        listings = [{"nightly_rate": r, "bedrooms": 2, "rating": 4.5} for r in rates]
+        listings = [
+            {"nightly_rate": r, "bedrooms": 2, "rating": 4.9, "review_count": 10}
+            for r in rates
+        ]
         metrics = compute_zone_metrics(listings)
         assert metrics["median_nightly_rate"] == pytest.approx(100.0)
 
     def test_median_nightly_rate_even_count(self):
         rates = [80.0, 100.0, 120.0, 140.0]
-        listings = [{"nightly_rate": r, "bedrooms": 2, "rating": 4.5} for r in rates]
+        listings = [
+            {"nightly_rate": r, "bedrooms": 2, "rating": 4.9, "review_count": 10}
+            for r in rates
+        ]
         metrics = compute_zone_metrics(listings)
         assert metrics["median_nightly_rate"] == pytest.approx(110.0)
 
     def test_listing_count(self):
-        listings = [{"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.5}] * 7
+        listings = [
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.9, "review_count": 10}
+        ] * 7
         metrics = compute_zone_metrics(listings)
         assert metrics["listing_count"] == 7
 
     def test_avg_bedrooms(self):
         listings = [
-            {"nightly_rate": 100.0, "bedrooms": 1, "rating": 4.0},
-            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.0},
-            {"nightly_rate": 100.0, "bedrooms": 3, "rating": 4.0},
+            {"nightly_rate": 100.0, "bedrooms": 1, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 100.0, "bedrooms": 3, "rating": 4.9, "review_count": 10},
         ]
         metrics = compute_zone_metrics(listings)
         assert metrics["avg_bedrooms"] == pytest.approx(2.0)
 
     def test_avg_rating(self):
         listings = [
-            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.0},
-            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 5.0},
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 5.0, "review_count": 10},
         ]
         metrics = compute_zone_metrics(listings)
-        assert metrics["avg_rating"] == pytest.approx(4.5)
+        assert metrics["avg_rating"] == pytest.approx(4.95)
 
     def test_ignores_null_nightly_rates_for_median(self):
         listings = [
-            {"nightly_rate": None, "bedrooms": 2, "rating": 4.5},
-            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.5},
-            {"nightly_rate": 200.0, "bedrooms": 2, "rating": 4.5},
+            {"nightly_rate": None, "bedrooms": 2, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 200.0, "bedrooms": 2, "rating": 4.9, "review_count": 10},
         ]
         metrics = compute_zone_metrics(listings)
         assert metrics["median_nightly_rate"] == pytest.approx(150.0)
@@ -84,9 +98,14 @@ class TestComputeZoneMetrics:
 
     def test_ignores_null_bedrooms_for_avg(self):
         listings = [
-            {"nightly_rate": 100.0, "bedrooms": None, "rating": 4.5},
-            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.5},
-            {"nightly_rate": 100.0, "bedrooms": 4, "rating": 4.5},
+            {
+                "nightly_rate": 100.0,
+                "bedrooms": None,
+                "rating": 4.9,
+                "review_count": 10,
+            },
+            {"nightly_rate": 100.0, "bedrooms": 2, "rating": 4.9, "review_count": 10},
+            {"nightly_rate": 100.0, "bedrooms": 4, "rating": 4.9, "review_count": 10},
         ]
         metrics = compute_zone_metrics(listings)
         assert metrics["avg_bedrooms"] == pytest.approx(3.0)
@@ -98,11 +117,14 @@ class TestComputeZoneMetrics:
 
 class TestUpdateZoneStrMetrics:
     def test_computes_and_stores_metrics(self, tmp_path):
-        db_path = make_db_with_listings(tmp_path, [
-            ("SA00000001", "L1", 100.0, 2, 4.5),
-            ("SA00000001", "L2", 120.0, 3, 4.8),
-            ("SA00000001", "L3", 80.0, 1, 4.2),
-        ])
+        db_path = make_db_with_listings(
+            tmp_path,
+            [
+                ("SA00000001", "L1", 100.0, 2, 4.9),
+                ("SA00000001", "L2", 120.0, 3, 4.9),
+                ("SA00000001", "L3", 80.0, 1, 4.9),
+            ],
+        )
         init_str_metrics_table(db_path)
 
         update_zone_str_metrics(db_path, "SA00000001")
@@ -110,7 +132,7 @@ class TestUpdateZoneStrMetrics:
         conn = sqlite3.connect(db_path)
         row = conn.execute(
             "SELECT median_nightly_rate, listing_count, avg_bedrooms, avg_rating FROM zone_str_metrics WHERE link_zona = ?",
-            ("SA00000001",)
+            ("SA00000001",),
         ).fetchone()
         conn.close()
 
@@ -118,12 +140,15 @@ class TestUpdateZoneStrMetrics:
         assert row[0] == pytest.approx(100.0)  # median of [80, 100, 120]
         assert row[1] == 3
         assert row[2] == pytest.approx(2.0)
-        assert row[3] == pytest.approx(4.5)
+        assert row[3] == pytest.approx(4.9)
 
     def test_replaces_existing_metrics(self, tmp_path):
-        db_path = make_db_with_listings(tmp_path, [
-            ("SA00000001", "L1", 50.0, 1, 4.0),
-        ])
+        db_path = make_db_with_listings(
+            tmp_path,
+            [
+                ("SA00000001", "L1", 50.0, 1, 4.9),
+            ],
+        )
         init_str_metrics_table(db_path)
         update_zone_str_metrics(db_path, "SA00000001")
 
@@ -131,8 +156,8 @@ class TestUpdateZoneStrMetrics:
         conn = sqlite3.connect(db_path)
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
-            "INSERT INTO airbnb_listings (link_zona, listing_id, nightly_rate, bedrooms, rating, scraped_at) VALUES (?,?,?,?,?,?)",
-            ("SA00000001", "L2", 150.0, 2, 4.8, now),
+            "INSERT INTO airbnb_listings (link_zona, listing_id, nightly_rate, bedrooms, rating, review_count, scraped_at) VALUES (?,?,?,?,?,?,?)",
+            ("SA00000001", "L2", 150.0, 2, 4.9, 10, now),
         )
         conn.commit()
         conn.close()
@@ -141,8 +166,7 @@ class TestUpdateZoneStrMetrics:
 
         conn = sqlite3.connect(db_path)
         rows = conn.execute(
-            "SELECT COUNT(*) FROM zone_str_metrics WHERE link_zona = ?",
-            ("SA00000001",)
+            "SELECT COUNT(*) FROM zone_str_metrics WHERE link_zona = ?", ("SA00000001",)
         ).fetchone()
         conn.close()
         assert rows[0] == 1  # Only one row, updated in place

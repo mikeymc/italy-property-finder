@@ -60,6 +60,13 @@
   font-size: 0.85rem;
 }
 
+.search-input {
+  flex: 1;
+  min-width: 200px;
+  border-color: #1a1a2e !important;
+  background-color: #fff;
+}
+
 .zone-count {
   font-size: 0.8rem;
   color: #666;

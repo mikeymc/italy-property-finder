@@ -5,7 +5,7 @@ import { useState, useEffect } from 'react';
 import { startScrape, getAirbnbListings } from '../api';
 import { useScrapeJob } from '../hooks/useScrapeJob';
 
-export function AirbnbListings({ query }) {
+export function AirbnbListings({ query, onScrapeComplete }) {
   const [listings, setListings] = useState([]);
   const [jobId, setJobId] = useState(null);
   const [checkin, setCheckin] = useState('2025-07-01');
@@ -25,9 +25,12 @@ export function AirbnbListings({ query }) {
     if (job?.status === 'completed') {
       getAirbnbListings(query)
         .then(setListings)
-        .catch(() => {});
+        .catch(() => { });
+      if (onScrapeComplete) {
+        onScrapeComplete();
+      }
     }
-  }, [job?.status, query]);
+  }, [job?.status, query, onScrapeComplete]);
 
   const handleScrape = async () => {
     try {
@@ -61,19 +64,23 @@ export function AirbnbListings({ query }) {
 
       {listings.length > 0 && (
         <div className="listing-cards">
-          {listings.map((l) => (
-            <div key={l.id} className="listing-card">
-              <div className="listing-header">
-                <strong>{l.title || l.name}</strong>
-                {l.is_guest_favorite ? <span className="badge">Guest Favorite</span> : null}
-              </div>
-              <div className="listing-details">
-                {l.nightly_rate && <span>€{l.nightly_rate.toFixed(0)}/night</span>}
-                {l.bedrooms && <span>{l.bedrooms} bed</span>}
-                {l.rating && <span>{l.rating} ({l.review_count})</span>}
-              </div>
-            </div>
-          ))}
+          {listings.map((l) => {
+            const isExcluded = l.review_count == null || l.review_count < 3 || l.rating == null || l.rating < 4.85;
+            return (
+              <a key={l.id || l.listing_id} href={`https://www.airbnb.com/rooms/${l.listing_id}`} target="_blank" rel="noopener noreferrer" className={`listing-card ${isExcluded ? 'excluded' : ''}`} style={{ textDecoration: 'none', color: 'inherit', opacity: isExcluded ? 0.55 : 1 }}>
+                <div className="listing-header">
+                  <strong>{l.title || l.name}</strong>
+                  {l.is_guest_favorite ? <span className="badge">Guest Favorite</span> : null}
+                  {isExcluded ? <span className="badge badge-excluded" style={{ backgroundColor: '#666', color: '#fff', marginLeft: 'auto' }}>Not used in Yield</span> : null}
+                </div>
+                <div className="listing-details">
+                  {l.nightly_rate && <span>€{l.nightly_rate.toFixed(0)}/night</span>}
+                  {l.bedrooms != null && <span>{l.bedrooms} bed</span>}
+                  {l.rating != null && <span>{l.rating} ({l.review_count})</span>}
+                </div>
+              </a>
+            );
+          })}
         </div>
       )}
     </div>

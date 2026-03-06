@@ -19,7 +19,8 @@ def _connect(db_path: str) -> sqlite3.Connection:
 def init_db(db_path: str) -> None:
     """Create tables if they don't exist."""
     conn = _connect(db_path)
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS airbnb_listings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             query TEXT NOT NULL,
@@ -37,8 +38,10 @@ def init_db(db_path: str) -> None:
             is_guest_favorite INTEGER,
             scraped_at TEXT NOT NULL
         )
-    """)
-    conn.execute("""
+    """
+    )
+    conn.execute(
+        """
         CREATE TABLE IF NOT EXISTS scrape_jobs (
             id TEXT PRIMARY KEY,
             query TEXT NOT NULL,
@@ -49,8 +52,11 @@ def init_db(db_path: str) -> None:
             error TEXT,
             created_at TEXT NOT NULL
         )
-    """)
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_listings_query ON airbnb_listings(query)")
+    """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_listings_query ON airbnb_listings(query)"
+    )
     conn.commit()
     conn.close()
 
@@ -91,7 +97,8 @@ def get_listings(db_path: str, query: str) -> list[dict]:
     """Get cached listings for a query."""
     conn = _connect(db_path)
     rows = conn.execute(
-        "SELECT * FROM airbnb_listings WHERE query = ? ORDER BY id", (query,)
+        "SELECT * FROM airbnb_listings WHERE query = ? ORDER BY rating DESC, id",
+        (query,),
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -133,7 +140,9 @@ def update_job(
         params.append(error)
     if updates:
         params.append(job_id)
-        conn.execute(f"UPDATE scrape_jobs SET {', '.join(updates)} WHERE id = ?", params)
+        conn.execute(
+            f"UPDATE scrape_jobs SET {', '.join(updates)} WHERE id = ?", params
+        )
         conn.commit()
     conn.close()
 

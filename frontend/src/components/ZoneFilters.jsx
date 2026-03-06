@@ -7,6 +7,7 @@ import { getRegions, getProvinces } from '../api';
 export function ZoneFilters({ filters, onChange }) {
   const [regions, setRegions] = useState([]);
   const [provinces, setProvinces] = useState([]);
+  const [searchTerm, setSearchTerm] = useState(filters.q || '');
 
   useEffect(() => {
     getRegions().then(setRegions).catch(() => { });
@@ -20,12 +21,30 @@ export function ZoneFilters({ filters, onChange }) {
     }
   }, [filters.region]);
 
+  // Debounce search term changes
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchTerm !== (filters.q || '')) {
+        onChange({ ...filters, q: searchTerm || undefined });
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchTerm, onChange, filters]);
+
   const update = (key, value) => {
     onChange({ ...filters, [key]: value || undefined });
   };
 
   return (
     <div className="zone-filters">
+      <input
+        type="text"
+        placeholder="Search for a zone..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="search-input"
+      />
+
       <select
         value={filters.region || ''}
         onChange={(e) => {

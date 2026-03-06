@@ -12,12 +12,13 @@ async function fetchJson(url) {
   return resp.json();
 }
 
-export async function getZones({ region, province, maxPrice, minRent } = {}) {
+export async function getZones({ region, province, maxPrice, minRent, q } = {}) {
   const params = new URLSearchParams();
   if (region) params.set('region', region);
   if (province) params.set('province', province);
   if (maxPrice) params.set('max_price', maxPrice);
   if (minRent) params.set('min_rent', minRent);
+  if (q) params.set('q', q);
   return fetchJson(`${BASE}/zones?${params}`);
 }
 

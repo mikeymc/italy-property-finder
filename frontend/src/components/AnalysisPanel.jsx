@@ -6,7 +6,7 @@ import { getAnalysis } from '../api';
 import { FinancialSummary } from './FinancialSummary';
 import { AirbnbListings } from './AirbnbListings';
 
-export function AnalysisPanel({ zone, zoneOverrides, setZoneOverrides, defaultParams }) {
+export function AnalysisPanel({ zone, zoneOverrides, setZoneOverrides, defaultParams, onScrapeComplete }) {
 
   const [analysis, setAnalysis] = useState(null);
 
@@ -109,7 +109,7 @@ export function AnalysisPanel({ zone, zoneOverrides, setZoneOverrides, defaultPa
     { key: 'internet_monthly', label: 'Internet (€/mo)', min: 0, max: 100, step: 5 },
   ];
 
-  const query = zone ? `${zone.comune_name}, Italy` : null;
+  const query = zone ? zone.link_zona : null;
 
   return (
     <div className="analysis-panel">
@@ -188,7 +188,7 @@ export function AnalysisPanel({ zone, zoneOverrides, setZoneOverrides, defaultPa
 
       <FinancialSummary analysis={analysis} />
 
-      {query && <AirbnbListings query={query} />}
+      {query && <AirbnbListings query={query} onScrapeComplete={onScrapeComplete} />}
     </div>
   );
 }

@@ -53,6 +53,7 @@ def create_app(db_path: str) -> Flask:
         province = request.args.get("province")
         max_price = request.args.get("max_price", type=float)
         min_rent = request.args.get("min_rent", type=float)
+        search_query = request.args.get("q")
 
         results = query_zones(
             db_path,
@@ -60,6 +61,7 @@ def create_app(db_path: str) -> Flask:
             province=province,
             max_buy_price_sqm=max_price,
             min_rent_sqm=min_rent,
+            search_query=search_query,
         )
 
         # Attach STR metrics where available
@@ -205,20 +207,43 @@ def create_app(db_path: str) -> Flask:
 
     @app.route("/api/scrape/airbnb", methods=["POST"])
     def start_scrape():
+        import sqlite3 as _sqlite3
+
         data = request.get_json() or {}
-        query = data.get("query")
+        query = data.get("query")  # Expected to be link_zona
         checkin = data.get("checkin")
         checkout = data.get("checkout")
         if not all([query, checkin, checkout]):
-            return jsonify({"error": "Required: query, checkin, checkout"}), 400
+            return (
+                jsonify({"error": "Required: query (link_zona), checkin, checkout"}),
+                400,
+            )
 
+        # Look up zone coordinates
+        conn = _sqlite3.connect(db_path)
+        conn.row_factory = _sqlite3.Row
+        zone = conn.execute(
+            "SELECT link_zona, ne_lat, ne_lng, sw_lat, sw_lng FROM omi_zones WHERE link_zona = ?",
+            (query,),
+        ).fetchone()
+        conn.close()
+
+        if not zone or not zone["ne_lat"]:
+            return (
+                jsonify({"error": f"Zone {query} not found or missing bounding box"}),
+                404,
+            )
+
+        zone_dict = dict(zone)
         job_id = create_job(db_path, query, checkin, checkout)
 
         def run_scrape():
             update_job(db_path, job_id, status="running")
             try:
-                listings = search_area(query, checkin, checkout)
-                save_listings(db_path, query, listings)
+                listings = sample_zone(
+                    db_path, zone_dict, checkin=checkin, checkout=checkout
+                )
+                update_zone_str_metrics(db_path, query)
                 update_job(
                     db_path, job_id, status="completed", result_count=len(listings)
                 )

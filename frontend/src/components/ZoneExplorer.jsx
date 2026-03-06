@@ -5,7 +5,7 @@ import { ZoneMap } from './ZoneMap';
 
 import { calculateZoneMetrics } from '../utils/finance';
 
-export function ZoneExplorer({ onSelectZone, zoneOverrides, defaultParams }) {
+export function ZoneExplorer({ onSelectZone, zoneOverrides, defaultParams, refreshTrigger }) {
   const [filters, setFilters] = useState({});
   const [zones, setZones] = useState([]);
   const [sortKey, setSortKey] = useState('yield');
@@ -21,7 +21,7 @@ export function ZoneExplorer({ onSelectZone, zoneOverrides, defaultParams }) {
       .then(setZones)
       .catch(() => setZones([]))
       .finally(() => setLoading(false));
-  }, [filters]);
+  }, [filters, refreshTrigger]);
 
   // Poll sampling status when active
   useEffect(() => {

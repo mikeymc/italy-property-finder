@@ -49,7 +49,8 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     conn.execute("DROP TABLE IF EXISTS omi_values")
     conn.execute("DROP TABLE IF EXISTS omi_zones")
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE omi_values (
             area TEXT,
             region TEXT,
@@ -67,9 +68,11 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
             rent_min REAL,
             rent_max REAL
         )
-    """)
+    """
+    )
 
-    conn.execute("""
+    conn.execute(
+        """
         CREATE TABLE omi_zones (
             area TEXT,
             region TEXT,
@@ -83,7 +86,8 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
             prevalent_type TEXT,
             microzona INTEGER
         )
-    """)
+    """
+    )
 
     # Load values (residential only)
     reader = _open_omi_csv(valori_csv)
@@ -93,23 +97,25 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
         cod_tip = row.get("Cod_Tip", "").strip()
         if cod_tip not in RESIDENTIAL_TYPES:
             continue
-        rows.append((
-            row["Area_territoriale"].strip(),
-            row["Regione"].strip(),
-            row["Prov"].strip(),
-            row["Comune_ISTAT"].strip(),
-            row["Comune_descrizione"].strip(),
-            row["Fascia"].strip(),
-            row["Zona"].strip(),
-            row["LinkZona"].strip(),
-            cod_tip,
-            row["Descr_Tipologia"].strip(),
-            row["Stato"].strip(),
-            parse_italian_float(row["Compr_min"].strip()),
-            parse_italian_float(row["Compr_max"].strip()),
-            parse_italian_float(row["Loc_min"].strip()),
-            parse_italian_float(row["Loc_max"].strip()),
-        ))
+        rows.append(
+            (
+                row["Area_territoriale"].strip(),
+                row["Regione"].strip(),
+                row["Prov"].strip(),
+                row["Comune_ISTAT"].strip(),
+                row["Comune_descrizione"].strip(),
+                row["Fascia"].strip(),
+                row["Zona"].strip(),
+                row["LinkZona"].strip(),
+                cod_tip,
+                row["Descr_Tipologia"].strip(),
+                row["Stato"].strip(),
+                parse_italian_float(row["Compr_min"].strip()),
+                parse_italian_float(row["Compr_max"].strip()),
+                parse_italian_float(row["Loc_min"].strip()),
+                parse_italian_float(row["Loc_max"].strip()),
+            )
+        )
 
     conn.executemany(
         "INSERT INTO omi_values VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -120,19 +126,21 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
     reader = _open_omi_csv(zone_csv)
     zone_rows = []
     for row in reader:
-        zone_rows.append((
-            row["Area_territoriale"].strip(),
-            row["Regione"].strip(),
-            row["Prov"].strip(),
-            row["Comune_ISTAT"].strip(),
-            row["Comune_descrizione"].strip(),
-            row["Fascia"].strip(),
-            row["Zona"].strip(),
-            row.get("Zona_Descr", "").strip(),
-            row["LinkZona"].strip(),
-            row.get("Descr_tip_prev", "").strip(),
-            int(row.get("Microzona", "0").strip() or 0),
-        ))
+        zone_rows.append(
+            (
+                row["Area_territoriale"].strip(),
+                row["Regione"].strip(),
+                row["Prov"].strip(),
+                row["Comune_ISTAT"].strip(),
+                row["Comune_descrizione"].strip(),
+                row["Fascia"].strip(),
+                row["Zona"].strip(),
+                row.get("Zona_Descr", "").strip(),
+                row["LinkZona"].strip(),
+                row.get("Descr_tip_prev", "").strip(),
+                int(row.get("Microzona", "0").strip() or 0),
+            )
+        )
 
     conn.executemany(
         "INSERT INTO omi_zones VALUES (?,?,?,?,?,?,?,?,?,?,?)",
@@ -141,9 +149,15 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
 
     # Create indexes for common queries
     conn.execute("CREATE INDEX IF NOT EXISTS idx_values_region ON omi_values(region)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_values_province ON omi_values(province)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_values_comune ON omi_values(comune_istat)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_values_type ON omi_values(property_type)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_values_province ON omi_values(province)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_values_comune ON omi_values(comune_istat)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_values_type ON omi_values(property_type)"
+    )
     conn.execute("CREATE INDEX IF NOT EXISTS idx_zones_link ON omi_zones(link_zona)")
 
     conn.commit()
@@ -153,7 +167,9 @@ def load_omi_to_sqlite(valori_csv: str, zone_csv: str, db_path: str) -> None:
 def get_regions(db_path: str) -> list[str]:
     """Return sorted list of distinct regions in the OMI database."""
     conn = sqlite3.connect(db_path)
-    rows = conn.execute("SELECT DISTINCT region FROM omi_values ORDER BY region").fetchall()
+    rows = conn.execute(
+        "SELECT DISTINCT region FROM omi_values ORDER BY region"
+    ).fetchall()
     conn.close()
     return [r[0] for r in rows]
 
@@ -175,6 +191,7 @@ def query_zones(
     province: Optional[str] = None,
     max_buy_price_sqm: Optional[float] = None,
     min_rent_sqm: Optional[float] = None,
+    search_query: Optional[str] = None,
     property_type: str = "Abitazioni civili",
     condition: str = "NORMALE",
 ) -> list[dict]:
@@ -205,6 +222,10 @@ def query_zones(
     if min_rent_sqm is not None:
         query += " AND v.rent_min >= ?"
         params.append(min_rent_sqm)
+    if search_query:
+        query += " AND (v.comune_name LIKE ? OR z.zona_desc LIKE ?)"
+        params.append(f"%{search_query}%")
+        params.append(f"%{search_query}%")
 
     query += " ORDER BY v.buy_min ASC"
 
